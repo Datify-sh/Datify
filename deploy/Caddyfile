@@ -1,0 +1,10 @@
+datify.deploy.orb.local {
+    # Use internal CA for local .orb.local domains
+    tls internal
+    reverse_proxy datify:8080
+}
+
+# Fallback for localhost development (HTTP)
+:80 {
+    reverse_proxy datify:8080
+}

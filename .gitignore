@@ -1,0 +1,42 @@
+# Backend (Rust)
+/backend/target/
+**/*.rs.bk
+/backend/*.db
+/backend/*.db-journal
+/backend/*.db-shm
+/backend/*.db-wal
+/backend/data/
+
+# Frontend (Node)
+/frontend/node_modules/
+/frontend/dist/
+/frontend/.vite/
+/frontend/.turbo/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+*.tar.gz
+*.zip
+
+# Docker
+docker-compose.override.yml
+
+node_modules

@@ -1,0 +1,33 @@
+# Rust formatting configuration for Datify backend
+# Matches frontend line width (100) for consistency across the monorepo
+
+edition = "2021"
+hard_tabs = false
+tab_spaces = 4
+newline_style = "Auto"
+use_small_heuristics = "Default"
+
+# Line length and wrapping
+max_width = 100
+comment_width = 100
+wrap_comments = true
+format_strings = true
+normalize_comments = true
+
+# Imports
+reorder_imports = true
+reorder_modules = true
+group_imports = "StdExternalCrate"
+
+# Trailing commas and formatting
+trailing_comma = "Vertical"
+match_block_trailing_comma = true
+fn_single_line = false
+where_single_line = false
+
+# Spacing and symbols
+space_before_colon = false
+space_after_colon = true
+spaces_around_ranges = false
+remove_nested_parens = true
+normalize_doc_attributes = true

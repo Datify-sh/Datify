@@ -1,0 +1,23 @@
+{
+  "name": "datify",
+  "version": "0.1.0",
+  "description": "Self-hosted database branching platform - an open-source alternative to Neon",
+  "private": true,
+  "workspaces": [
+    "frontend"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/datify/datify"
+  },
+  "keywords": [
+    "database",
+    "postgres",
+    "branching",
+    "neon",
+    "zfs",
+    "monorepo"
+  ],
+  "author": "Datify Contributors",
+  "license": "MIT"
+}

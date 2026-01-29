@@ -1,0 +1,1 @@
+export { DatabaseDetailPage } from "./detail";

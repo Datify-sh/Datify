@@ -1,0 +1,1 @@
+ALTER TABLE databases ADD COLUMN public_exposed INTEGER NOT NULL DEFAULT 0;
