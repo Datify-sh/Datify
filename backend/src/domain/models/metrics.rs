@@ -210,6 +210,156 @@ impl From<MetricsSnapshot> for MetricsHistoryPoint {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum MetricsStreamMessage {
     Connected { database_id: String },
-    Metrics { metrics: DatabaseMetrics },
+    Metrics { metrics: UnifiedMetrics },
     Error { message: String },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, Default)]
+pub struct KeyMetrics {
+    pub total_keys: i64,
+    pub keys_with_expiry: i64,
+    pub expired_keys: i64,
+    pub evicted_keys: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, Default)]
+pub struct CommandMetrics {
+    pub total_commands: i64,
+    pub ops_per_sec: f64,
+    pub keyspace_hits: i64,
+    pub keyspace_misses: i64,
+    pub hit_rate: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, Default)]
+pub struct ClientMetrics {
+    pub connected_clients: i32,
+    pub blocked_clients: i32,
+    pub max_clients: i32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, Default)]
+pub struct MemoryMetrics {
+    pub used_memory: i64,
+    pub used_memory_rss: i64,
+    pub used_memory_peak: i64,
+    pub max_memory: i64,
+    pub memory_fragmentation_ratio: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, Default)]
+pub struct ReplicationMetrics {
+    pub role: String,
+    pub connected_slaves: i32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, Default)]
+pub struct KeyValueMetrics {
+    pub timestamp: String,
+    pub keys: KeyMetrics,
+    pub commands: CommandMetrics,
+    pub memory: MemoryMetrics,
+    pub clients: ClientMetrics,
+    pub replication: ReplicationMetrics,
+    pub resources: ResourceMetrics,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(tag = "database_type", rename_all = "snake_case")]
+pub enum UnifiedMetrics {
+    Postgres(DatabaseMetrics),
+    Redis(KeyValueMetrics),
+    Valkey(KeyValueMetrics),
+}
+
+impl Default for UnifiedMetrics {
+    fn default() -> Self {
+        UnifiedMetrics::Postgres(DatabaseMetrics::default())
+    }
+}
+
+impl UnifiedMetrics {
+    pub fn timestamp(&self) -> &str {
+        match self {
+            UnifiedMetrics::Postgres(m) => &m.timestamp,
+            UnifiedMetrics::Redis(m) | UnifiedMetrics::Valkey(m) => &m.timestamp,
+        }
+    }
+
+    pub fn cpu_percent(&self) -> f64 {
+        match self {
+            UnifiedMetrics::Postgres(m) => m.resources.cpu_percent,
+            UnifiedMetrics::Redis(m) | UnifiedMetrics::Valkey(m) => m.resources.cpu_percent,
+        }
+    }
+
+    pub fn memory_percent(&self) -> f64 {
+        match self {
+            UnifiedMetrics::Postgres(m) => m.resources.memory_percent,
+            UnifiedMetrics::Redis(m) | UnifiedMetrics::Valkey(m) => m.resources.memory_percent,
+        }
+    }
+
+    pub fn memory_used_bytes(&self) -> i64 {
+        match self {
+            UnifiedMetrics::Postgres(m) => m.resources.memory_used_bytes,
+            UnifiedMetrics::Redis(m) | UnifiedMetrics::Valkey(m) => m.resources.memory_used_bytes,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct UnifiedMetricsResponse {
+    pub database_id: String,
+    pub metrics: UnifiedMetrics,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct KvMetricsHistoryPoint {
+    pub timestamp: String,
+    pub total_keys: i64,
+    pub ops_per_sec: f64,
+    pub hit_rate: f64,
+    pub used_memory: i64,
+    pub cpu_percent: f64,
+    pub memory_percent: f64,
+    pub connected_clients: i32,
+}
+
+#[derive(Debug, Clone, FromRow)]
+pub struct KvMetricsSnapshot {
+    pub id: String,
+    pub database_id: String,
+    pub database_type: String,
+    pub timestamp: String,
+    pub total_keys: i64,
+    pub keyspace_hits: i64,
+    pub keyspace_misses: i64,
+    pub total_commands: i64,
+    pub ops_per_sec: f64,
+    pub used_memory: i64,
+    pub cpu_percent: f64,
+    pub memory_percent: f64,
+    pub memory_used_bytes: i64,
+    pub connected_clients: i32,
+}
+
+impl From<KvMetricsSnapshot> for KvMetricsHistoryPoint {
+    fn from(s: KvMetricsSnapshot) -> Self {
+        let hit_rate = if s.keyspace_hits + s.keyspace_misses > 0 {
+            (s.keyspace_hits as f64 / (s.keyspace_hits + s.keyspace_misses) as f64) * 100.0
+        } else {
+            0.0
+        };
+        KvMetricsHistoryPoint {
+            timestamp: s.timestamp,
+            total_keys: s.total_keys,
+            ops_per_sec: s.ops_per_sec,
+            hit_rate,
+            used_memory: s.used_memory,
+            cpu_percent: s.cpu_percent,
+            memory_percent: s.memory_percent,
+            connected_clients: s.connected_clients,
+        }
+    }
 }

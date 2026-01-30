@@ -49,6 +49,7 @@ slug = "0.1"
 dotenvy = "0.15"
 sysinfo = "0.32"
 reqwest = { version = "0.12", features = ["json"] }
+async-trait = "0.1"
 
 [profile.release]
 opt-level = 3

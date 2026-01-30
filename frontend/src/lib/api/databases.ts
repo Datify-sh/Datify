@@ -8,13 +8,13 @@ import type {
   ExecuteQueryRequest,
   LogsResponse,
   MetricsHistory,
-  MetricsResponse,
   PaginatedResponse,
   QueryLogsResponse,
   QueryResult,
   SchemaInfo,
   TablePreview,
   TimeRange,
+  UnifiedMetricsResponse,
   UpdateDatabaseRequest,
 } from "./types";
 
@@ -81,7 +81,7 @@ export const databasesApi = {
     return `${baseUrl}/api/v1/databases/${id}/redis-cli`;
   },
 
-  metrics: (id: string) => apiClient.get<MetricsResponse>(`/databases/${id}/metrics`),
+  metrics: (id: string) => apiClient.get<UnifiedMetricsResponse>(`/databases/${id}/metrics`),
 
   metricsHistory: (id: string, range?: TimeRange) => {
     const params = range ? `?range=${range}` : "";

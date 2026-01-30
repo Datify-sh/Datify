@@ -692,29 +692,39 @@ impl DockerManager {
 
     pub async fn get_container_stats(&self, container_id: &str) -> AppResult<ContainerStats> {
         let options = StatsOptionsBuilder::default()
-            .stream(false)
-            .one_shot(true)
+            .stream(true)
+            .one_shot(false)
             .build();
 
         let mut stats_stream = self.docker.stats(container_id, Some(options));
 
-        if let Some(stats_result) = stats_stream.next().await {
-            let stats = stats_result
-                .map_err(|e| AppError::Docker(format!("Failed to get container stats: {}", e)))?;
+        let _first = stats_stream.next().await;
 
-            let cpu_percent = calculate_cpu_percent(&stats);
-            let (memory_used, memory_limit, memory_percent) = calculate_memory_stats(&stats);
+        let timeout =
+            tokio::time::timeout(std::time::Duration::from_secs(2), stats_stream.next()).await;
 
-            Ok(ContainerStats {
-                cpu_percent,
-                memory_used_bytes: memory_used,
-                memory_limit_bytes: memory_limit,
-                memory_percent,
-            })
-        } else {
-            Err(AppError::Docker(
+        match timeout {
+            Ok(Some(stats_result)) => {
+                let stats = stats_result.map_err(|e| {
+                    AppError::Docker(format!("Failed to get container stats: {}", e))
+                })?;
+
+                let cpu_percent = calculate_cpu_percent(&stats);
+                let (memory_used, memory_limit, memory_percent) = calculate_memory_stats(&stats);
+
+                Ok(ContainerStats {
+                    cpu_percent,
+                    memory_used_bytes: memory_used,
+                    memory_limit_bytes: memory_limit,
+                    memory_percent,
+                })
+            },
+            Ok(None) => Err(AppError::Docker(
                 "No stats available for container".to_string(),
-            ))
+            )),
+            Err(_) => Err(AppError::Docker(
+                "Timeout waiting for container stats".to_string(),
+            )),
         }
     }
 }

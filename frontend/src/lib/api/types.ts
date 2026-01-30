@@ -294,6 +294,60 @@ export interface MetricsResponse {
   metrics: DatabaseMetrics;
 }
 
+export interface KeyMetrics {
+  total_keys: number;
+  keys_with_expiry: number;
+  expired_keys: number;
+  evicted_keys: number;
+}
+
+export interface CommandMetrics {
+  total_commands: number;
+  ops_per_sec: number;
+  keyspace_hits: number;
+  keyspace_misses: number;
+  hit_rate: number;
+}
+
+export interface ClientMetrics {
+  connected_clients: number;
+  blocked_clients: number;
+  max_clients: number;
+}
+
+export interface MemoryMetrics {
+  used_memory: number;
+  used_memory_rss: number;
+  used_memory_peak: number;
+  max_memory: number;
+  memory_fragmentation_ratio: number;
+}
+
+export interface ReplicationMetrics {
+  role: string;
+  connected_slaves: number;
+}
+
+export interface KeyValueMetrics {
+  timestamp: string;
+  keys: KeyMetrics;
+  commands: CommandMetrics;
+  memory: MemoryMetrics;
+  clients: ClientMetrics;
+  replication: ReplicationMetrics;
+  resources: ResourceMetrics;
+}
+
+export type UnifiedMetrics =
+  | ({ database_type: "postgres" } & DatabaseMetrics)
+  | ({ database_type: "redis" } & KeyValueMetrics)
+  | ({ database_type: "valkey" } & KeyValueMetrics);
+
+export interface UnifiedMetricsResponse {
+  database_id: string;
+  metrics: UnifiedMetrics;
+}
+
 export interface MetricsHistoryPoint {
   timestamp: string;
   total_queries: number;
@@ -333,7 +387,7 @@ export interface QueryLogsResponse {
 
 export type MetricsStreamMessage =
   | { type: "connected"; database_id: string }
-  | { type: "metrics"; metrics: DatabaseMetrics }
+  | { type: "metrics"; metrics: UnifiedMetrics }
   | { type: "error"; message: string };
 
 // SQL Editor types
