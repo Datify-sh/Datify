@@ -31,6 +31,7 @@ interface CreateBranchDialogProps {
   onOpenChange: (open: boolean) => void;
   databaseId: string;
   sourceBranchName: string;
+  databaseType: string;
 }
 
 type BranchMode = "full" | "schema";
@@ -40,7 +41,9 @@ export function CreateBranchDialog({
   onOpenChange,
   databaseId,
   sourceBranchName,
+  databaseType,
 }: CreateBranchDialogProps) {
+  const isKeyValue = databaseType === "valkey" || databaseType === "redis";
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [name, setName] = React.useState("");
@@ -138,29 +141,31 @@ export function CreateBranchDialog({
               <FieldDescription>Lowercase letters, numbers, and hyphens only</FieldDescription>
             </Field>
 
-            <Field>
-              <FieldLabel>Branch Type</FieldLabel>
-              <div className="grid grid-cols-2 gap-3 mt-2">
-                <BranchModeOption
-                  mode="full"
-                  currentMode={mode}
-                  onSelect={setMode}
-                  disabled={createMutation.isPending}
-                  icon={Database01Icon}
-                  title="With Data"
-                  description="Full copy of all data"
-                />
-                <BranchModeOption
-                  mode="schema"
-                  currentMode={mode}
-                  onSelect={setMode}
-                  disabled={createMutation.isPending}
-                  icon={File01Icon}
-                  title="Schema Only"
-                  description="Structure without data"
-                />
-              </div>
-            </Field>
+            {!isKeyValue && (
+              <Field>
+                <FieldLabel>Branch Type</FieldLabel>
+                <div className="grid grid-cols-2 gap-3 mt-2">
+                  <BranchModeOption
+                    mode="full"
+                    currentMode={mode}
+                    onSelect={setMode}
+                    disabled={createMutation.isPending}
+                    icon={Database01Icon}
+                    title="With Data"
+                    description="Full copy of all data"
+                  />
+                  <BranchModeOption
+                    mode="schema"
+                    currentMode={mode}
+                    onSelect={setMode}
+                    disabled={createMutation.isPending}
+                    icon={File01Icon}
+                    title="Schema Only"
+                    description="Structure without data"
+                  />
+                </div>
+              </Field>
+            )}
 
             <div className="rounded-lg border bg-muted/50 p-3">
               <div className="flex gap-2">
@@ -170,7 +175,15 @@ export function CreateBranchDialog({
                   strokeWidth={2}
                 />
                 <div className="text-xs text-muted-foreground space-y-1">
-                  {mode === "full" ? (
+                  {isKeyValue ? (
+                    <>
+                      <p>
+                        <strong className="text-foreground">Full copy</strong> creates an
+                        independent database with all your keys and data using replication.
+                      </p>
+                      <p>Changes in the branch won't affect the source.</p>
+                    </>
+                  ) : mode === "full" ? (
                     <>
                       <p>
                         <strong className="text-foreground">Full copy</strong> creates an

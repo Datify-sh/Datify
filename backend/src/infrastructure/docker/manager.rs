@@ -690,6 +690,211 @@ impl DockerManager {
         Ok(())
     }
 
+    pub async fn fork_redis_database(
+        &self,
+        source_container: &str,
+        target_container: &str,
+        source_password: &str,
+        target_password: &str,
+    ) -> AppResult<()> {
+        self.fork_kv_database(
+            source_container,
+            target_container,
+            source_password,
+            target_password,
+            "redis-cli",
+        )
+        .await
+    }
+
+    pub async fn fork_valkey_database(
+        &self,
+        source_container: &str,
+        target_container: &str,
+        source_password: &str,
+        target_password: &str,
+    ) -> AppResult<()> {
+        self.fork_kv_database(
+            source_container,
+            target_container,
+            source_password,
+            target_password,
+            "valkey-cli",
+        )
+        .await
+    }
+
+    async fn fork_kv_database(
+        &self,
+        source_container: &str,
+        target_container: &str,
+        source_password: &str,
+        target_password: &str,
+        cli_cmd: &str,
+    ) -> AppResult<()> {
+        tracing::info!(
+            "Forking KV database from {} to {} using {}",
+            source_container,
+            target_container,
+            cli_cmd
+        );
+
+        let setup_cmd = format!(
+            "{cli} -a '{target_pwd}' REPLICAOF {source} 6379 && {cli} -a '{target_pwd}' CONFIG \
+             SET masterauth '{source_pwd}'",
+            cli = cli_cmd,
+            target_pwd = target_password,
+            source = source_container,
+            source_pwd = source_password
+        );
+
+        let exec_config = ExecConfig {
+            attach_stdin: Some(false),
+            attach_stdout: Some(true),
+            attach_stderr: Some(true),
+            tty: Some(false),
+            cmd: Some(vec!["sh".to_string(), "-c".to_string(), setup_cmd]),
+            ..Default::default()
+        };
+
+        let exec = self
+            .docker
+            .create_exec(target_container, exec_config)
+            .await
+            .map_err(|e| AppError::Docker(format!("Failed to setup replication: {}", e)))?;
+
+        let output =
+            self.docker.start_exec(&exec.id, None).await.map_err(|e| {
+                AppError::Docker(format!("Failed to start replication setup: {}", e))
+            })?;
+
+        if let bollard::exec::StartExecResults::Attached { mut output, .. } = output {
+            while let Some(result) = output.next().await {
+                if let Ok(log) = result {
+                    let msg = match log {
+                        bollard::container::LogOutput::StdOut { message } => {
+                            String::from_utf8_lossy(&message).to_string()
+                        },
+                        bollard::container::LogOutput::StdErr { message } => {
+                            String::from_utf8_lossy(&message).to_string()
+                        },
+                        _ => String::new(),
+                    };
+                    if !msg.is_empty() {
+                        tracing::debug!("Replication setup output: {}", msg.trim());
+                    }
+                }
+            }
+        }
+
+        let timeout = std::time::Duration::from_secs(120);
+        let start = std::time::Instant::now();
+        let poll_interval = std::time::Duration::from_millis(500);
+
+        loop {
+            if start.elapsed() > timeout {
+                return Err(AppError::Docker(
+                    "Replication sync timeout after 120 seconds".to_string(),
+                ));
+            }
+
+            let info_cmd = format!("{} -a '{}' INFO replication", cli_cmd, target_password);
+
+            let exec_config = ExecConfig {
+                attach_stdin: Some(false),
+                attach_stdout: Some(true),
+                attach_stderr: Some(true),
+                tty: Some(false),
+                cmd: Some(vec!["sh".to_string(), "-c".to_string(), info_cmd]),
+                ..Default::default()
+            };
+
+            let exec = self
+                .docker
+                .create_exec(target_container, exec_config)
+                .await
+                .map_err(|e| AppError::Docker(format!("Failed to check replication: {}", e)))?;
+
+            let output =
+                self.docker.start_exec(&exec.id, None).await.map_err(|e| {
+                    AppError::Docker(format!("Failed to get replication info: {}", e))
+                })?;
+
+            let mut info_output = String::new();
+            if let bollard::exec::StartExecResults::Attached { mut output, .. } = output {
+                while let Some(result) = output.next().await {
+                    if let Ok(log) = result {
+                        let msg = match log {
+                            bollard::container::LogOutput::StdOut { message } => {
+                                String::from_utf8_lossy(&message).to_string()
+                            },
+                            bollard::container::LogOutput::StdErr { message } => {
+                                String::from_utf8_lossy(&message).to_string()
+                            },
+                            _ => String::new(),
+                        };
+                        info_output.push_str(&msg);
+                    }
+                }
+            }
+
+            let link_up = info_output.contains("master_link_status:up");
+            let sync_done = !info_output.contains("master_sync_in_progress:1");
+
+            if link_up && sync_done {
+                tracing::debug!("Replication sync completed");
+                break;
+            }
+
+            tokio::time::sleep(poll_interval).await;
+        }
+
+        let promote_cmd = format!("{} -a '{}' REPLICAOF NO ONE", cli_cmd, target_password);
+
+        let exec_config = ExecConfig {
+            attach_stdin: Some(false),
+            attach_stdout: Some(true),
+            attach_stderr: Some(true),
+            tty: Some(false),
+            cmd: Some(vec!["sh".to_string(), "-c".to_string(), promote_cmd]),
+            ..Default::default()
+        };
+
+        let exec = self
+            .docker
+            .create_exec(target_container, exec_config)
+            .await
+            .map_err(|e| AppError::Docker(format!("Failed to promote to standalone: {}", e)))?;
+
+        let output = self
+            .docker
+            .start_exec(&exec.id, None)
+            .await
+            .map_err(|e| AppError::Docker(format!("Failed to execute promotion: {}", e)))?;
+
+        if let bollard::exec::StartExecResults::Attached { mut output, .. } = output {
+            while let Some(result) = output.next().await {
+                if let Ok(log) = result {
+                    let msg = match log {
+                        bollard::container::LogOutput::StdOut { message } => {
+                            String::from_utf8_lossy(&message).to_string()
+                        },
+                        bollard::container::LogOutput::StdErr { message } => {
+                            String::from_utf8_lossy(&message).to_string()
+                        },
+                        _ => String::new(),
+                    };
+                    if !msg.is_empty() {
+                        tracing::debug!("Promotion output: {}", msg.trim());
+                    }
+                }
+            }
+        }
+
+        tracing::info!("KV database fork completed successfully");
+        Ok(())
+    }
+
     pub async fn get_container_stats(&self, container_id: &str) -> AppResult<ContainerStats> {
         let options = StatsOptionsBuilder::default()
             .stream(true)

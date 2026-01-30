@@ -713,7 +713,7 @@ export function DatabaseDetailPage() {
   const isKeyValue = database.database_type === "valkey" || database.database_type === "redis";
   const isValkey = database.database_type === "valkey";
   const isRedis = database.database_type === "redis";
-  const hasBranches = database.branch !== undefined && !isKeyValue;
+  const hasBranches = database.branch !== undefined;
   const isChildBranch = database.branch?.parent_id != null;
 
   return (
@@ -1011,6 +1011,7 @@ export function DatabaseDetailPage() {
           onOpenChange={setIsCreateBranchOpen}
           databaseId={id}
           sourceBranchName={database.branch?.name ?? "main"}
+          databaseType={database.database_type}
         />
       )}
     </div>

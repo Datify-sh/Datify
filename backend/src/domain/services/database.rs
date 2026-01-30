@@ -607,12 +607,6 @@ impl DatabaseService {
             .await?
             .ok_or_else(|| AppError::NotFound(format!("Database '{}' not found", database_id)))?;
 
-        if source.database_type == "valkey" || source.database_type == "redis" {
-            return Err(AppError::Validation(
-                "Branching is not supported for key-value databases".to_string(),
-            ));
-        }
-
         if !self
             .project_repo
             .is_owner(&source.project_id, user_id)
@@ -691,31 +685,67 @@ impl DatabaseService {
         std::fs::create_dir_all(&data_path)
             .map_err(|e| AppError::Internal(format!("Failed to create data directory: {}", e)))?;
 
-        let config = ContainerConfig {
-            name: container_name.clone(),
-            image: format!("postgres:{}", source.postgres_version),
-            env: vec![
-                format!("POSTGRES_USER={}", branch.username),
-                "POSTGRES_DB=postgres".to_string(),
-            ],
-            data_path,
-            cpu_limit: source.cpu_limit,
-            memory_limit_mb: source.memory_limit_mb as i64,
-            internal_port: 5432,
-            exposed_port: Some(port as u16),
-            cmd: Some(vec![
-                "postgres".to_string(),
-                "-c".to_string(),
-                "shared_preload_libraries=pg_stat_statements".to_string(),
-                "-c".to_string(),
-                "pg_stat_statements.track=all".to_string(),
-            ]),
+        let container_id = match source.database_type.as_str() {
+            "redis" => {
+                let version = source.redis_version.as_deref().unwrap_or("7.4");
+                let config = ContainerConfig {
+                    name: container_name.clone(),
+                    image: format!("redis:{}-alpine", version),
+                    env: vec![],
+                    data_path,
+                    cpu_limit: source.cpu_limit,
+                    memory_limit_mb: source.memory_limit_mb as i64,
+                    internal_port: 6379,
+                    exposed_port: Some(port as u16),
+                    cmd: None,
+                };
+                self.docker
+                    .create_redis_container(config, &password)
+                    .await?
+            },
+            "valkey" => {
+                let version = source.valkey_version.as_deref().unwrap_or("8.0");
+                let config = ContainerConfig {
+                    name: container_name.clone(),
+                    image: format!("valkey/valkey:{}-alpine", version),
+                    env: vec![],
+                    data_path,
+                    cpu_limit: source.cpu_limit,
+                    memory_limit_mb: source.memory_limit_mb as i64,
+                    internal_port: 6379,
+                    exposed_port: Some(port as u16),
+                    cmd: None,
+                };
+                self.docker
+                    .create_valkey_container(config, &password)
+                    .await?
+            },
+            _ => {
+                let config = ContainerConfig {
+                    name: container_name.clone(),
+                    image: format!("postgres:{}", source.postgres_version),
+                    env: vec![
+                        format!("POSTGRES_USER={}", branch.username),
+                        "POSTGRES_DB=postgres".to_string(),
+                    ],
+                    data_path,
+                    cpu_limit: source.cpu_limit,
+                    memory_limit_mb: source.memory_limit_mb as i64,
+                    internal_port: 5432,
+                    exposed_port: Some(port as u16),
+                    cmd: Some(vec![
+                        "postgres".to_string(),
+                        "-c".to_string(),
+                        "shared_preload_libraries=pg_stat_statements".to_string(),
+                        "-c".to_string(),
+                        "pg_stat_statements.track=all".to_string(),
+                    ]),
+                };
+                self.docker
+                    .create_postgres_container(config, &password)
+                    .await?
+            },
         };
-
-        let container_id = self
-            .docker
-            .create_postgres_container(config, &password)
-            .await?;
         self.docker.start_container(&container_id).await?;
 
         let healthy = self.docker.wait_for_healthy(&container_id, 60).await?;
@@ -749,21 +779,44 @@ impl DatabaseService {
 
             let source_container = source.container_name();
 
-            // Wait for Docker DNS to propagate and container to be ready for connections
             tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
 
-            if let Err(e) = self
-                .docker
-                .fork_database(
-                    &source_container,
-                    &container_name,
-                    &source.username,
-                    &source_password,
-                    &branch.username,
-                    &password,
-                )
-                .await
-            {
+            let fork_result = match source.database_type.as_str() {
+                "redis" => {
+                    self.docker
+                        .fork_redis_database(
+                            &source_container,
+                            &container_name,
+                            &source_password,
+                            &password,
+                        )
+                        .await
+                },
+                "valkey" => {
+                    self.docker
+                        .fork_valkey_database(
+                            &source_container,
+                            &container_name,
+                            &source_password,
+                            &password,
+                        )
+                        .await
+                },
+                _ => {
+                    self.docker
+                        .fork_database(
+                            &source_container,
+                            &container_name,
+                            &source.username,
+                            &source_password,
+                            &branch.username,
+                            &password,
+                        )
+                        .await
+                },
+            };
+
+            if let Err(e) = fork_result {
                 tracing::warn!("Fork data failed (branch still created): {}", e);
             }
         }
@@ -831,16 +884,40 @@ impl DatabaseService {
         let parent_container = parent.container_name();
         let branch_container = branch.container_name();
 
-        self.docker
-            .fork_database(
-                &parent_container,
-                &branch_container,
-                &parent.username,
-                &parent_password,
-                &branch.username,
-                &branch_password,
-            )
-            .await?;
+        match branch.database_type.as_str() {
+            "redis" => {
+                self.docker
+                    .fork_redis_database(
+                        &parent_container,
+                        &branch_container,
+                        &parent_password,
+                        &branch_password,
+                    )
+                    .await?
+            },
+            "valkey" => {
+                self.docker
+                    .fork_valkey_database(
+                        &parent_container,
+                        &branch_container,
+                        &parent_password,
+                        &branch_password,
+                    )
+                    .await?
+            },
+            _ => {
+                self.docker
+                    .fork_database(
+                        &parent_container,
+                        &branch_container,
+                        &parent.username,
+                        &parent_password,
+                        &branch.username,
+                        &branch_password,
+                    )
+                    .await?
+            },
+        }
 
         self.database_repo.update_forked_at(database_id).await?;
 
