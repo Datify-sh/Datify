@@ -5,9 +5,11 @@ import type {
   ValkeyVersionsResponse,
 } from "./types";
 
+import { fetchWithAuth } from "./client";
+
 export const systemApi = {
   getInfo: async (): Promise<SystemInfoResponse> => {
-    const response = await fetch("/system");
+    const response = await fetchWithAuth("/api/v1/system");
     if (!response.ok) {
       throw new Error("Failed to fetch system info");
     }
@@ -15,7 +17,7 @@ export const systemApi = {
   },
 
   getPostgresVersions: async (): Promise<PostgresVersionsResponse> => {
-    const response = await fetch("/system/postgres-versions");
+    const response = await fetchWithAuth("/api/v1/system/postgres-versions");
     if (!response.ok) {
       throw new Error("Failed to fetch PostgreSQL versions");
     }
@@ -23,7 +25,7 @@ export const systemApi = {
   },
 
   getValkeyVersions: async (): Promise<ValkeyVersionsResponse> => {
-    const response = await fetch("/system/valkey-versions");
+    const response = await fetchWithAuth("/api/v1/system/valkey-versions");
     if (!response.ok) {
       throw new Error("Failed to fetch Valkey versions");
     }
@@ -31,7 +33,7 @@ export const systemApi = {
   },
 
   getRedisVersions: async (): Promise<RedisVersionsResponse> => {
-    const response = await fetch("/system/redis-versions");
+    const response = await fetchWithAuth("/api/v1/system/redis-versions");
     if (!response.ok) {
       throw new Error("Failed to fetch Redis versions");
     }

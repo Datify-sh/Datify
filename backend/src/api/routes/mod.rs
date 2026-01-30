@@ -81,22 +81,18 @@ pub async fn create_router(
         docker: docker.clone(),
     };
 
-    let public_routes = Router::new()
-        .route("/health", get(handlers::health))
-        .route("/ready", get(handlers::ready).with_state(health_state))
+    let system_routes = Router::new()
         .route(
-            "/system",
+            "/",
             get(handlers::system_info).with_state(settings.docker.public_host.clone()),
         )
-        .route(
-            "/system/postgres-versions",
-            get(handlers::get_postgres_versions),
-        )
-        .route(
-            "/system/valkey-versions",
-            get(handlers::get_valkey_versions),
-        )
-        .route("/system/redis-versions", get(handlers::get_redis_versions));
+        .route("/postgres-versions", get(handlers::get_postgres_versions))
+        .route("/valkey-versions", get(handlers::get_valkey_versions))
+        .route("/redis-versions", get(handlers::get_redis_versions));
+
+    let public_routes = Router::new()
+        .route("/health", get(handlers::health))
+        .route("/ready", get(handlers::ready).with_state(health_state));
 
     let auth_routes = Router::new()
         .route("/register", post(handlers::register))
@@ -212,6 +208,7 @@ pub async fn create_router(
     let protected_routes = Router::new()
         .merge(me_routes)
         .nest("/auth", logout_routes)
+        .nest("/system", system_routes)
         .nest("/projects", project_routes)
         .nest("/projects/{project_id}/databases", project_database_routes)
         .nest("/databases", database_routes)
