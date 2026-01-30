@@ -118,6 +118,7 @@ pub async fn ready(State(state): State<HealthState>) -> (StatusCode, Json<ReadyR
 pub struct SystemInfoResponse {
     pub cpu_cores: usize,
     pub total_memory_mb: u64,
+    pub public_host: String,
 }
 
 #[utoipa::path(
@@ -128,7 +129,7 @@ pub struct SystemInfoResponse {
     ),
     tag = "Health"
 )]
-pub async fn system_info() -> Json<SystemInfoResponse> {
+pub async fn system_info(State(public_host): State<String>) -> Json<SystemInfoResponse> {
     let sys = System::new_all();
     let cpu_cores = sys.cpus().len();
     let total_memory_mb = sys.total_memory() / (1024 * 1024);
@@ -136,5 +137,6 @@ pub async fn system_info() -> Json<SystemInfoResponse> {
     Json(SystemInfoResponse {
         cpu_cores,
         total_memory_mb,
+        public_host,
     })
 }

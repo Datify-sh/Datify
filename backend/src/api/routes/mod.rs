@@ -84,7 +84,10 @@ pub async fn create_router(
     let public_routes = Router::new()
         .route("/health", get(handlers::health))
         .route("/ready", get(handlers::ready).with_state(health_state))
-        .route("/system", get(handlers::system_info))
+        .route(
+            "/system",
+            get(handlers::system_info).with_state(settings.docker.public_host.clone()),
+        )
         .route(
             "/system/postgres-versions",
             get(handlers::get_postgres_versions),
