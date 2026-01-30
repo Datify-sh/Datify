@@ -76,6 +76,11 @@ export const databasesApi = {
     return `${baseUrl}/api/v1/databases/${id}/valkey-cli`;
   },
 
+  getRedisCliUrl: (id: string) => {
+    const baseUrl = window.location.origin.replace("http", "ws");
+    return `${baseUrl}/api/v1/databases/${id}/redis-cli`;
+  },
+
   metrics: (id: string) => apiClient.get<MetricsResponse>(`/databases/${id}/metrics`),
 
   metricsHistory: (id: string, range?: TimeRange) => {
