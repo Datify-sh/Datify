@@ -543,8 +543,16 @@ export function ProjectDetailPage() {
             <div className="space-y-4 py-4">
               <Field>
                 <FieldLabel>Database Name</FieldLabel>
-                <Input name="name" placeholder="my-database" required autoFocus />
-                <FieldDescription>A unique name for this database instance</FieldDescription>
+                <Input
+                  name="name"
+                  placeholder="my-database"
+                  required
+                  autoFocus
+                  onChange={(e) => {
+                    e.target.value = e.target.value.toLowerCase().replace(/\s/g, "-");
+                  }}
+                />
+                <FieldDescription>Lowercase letters, numbers, and hyphens only</FieldDescription>
               </Field>
               <Field>
                 <FieldLabel>Database Type</FieldLabel>
