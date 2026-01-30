@@ -12,8 +12,8 @@ use futures::{SinkExt, StreamExt};
 
 use crate::api::extractors::AuthUser;
 use crate::domain::models::{
-    MetricsHistory, MetricsHistoryQuery, MetricsResponse, MetricsStreamMessage, QueryLogsQuery,
-    QueryLogsResponse, TimeRange,
+    MetricsHistory, MetricsHistoryQuery, MetricsStreamMessage, QueryLogsQuery, QueryLogsResponse,
+    TimeRange, UnifiedMetricsResponse,
 };
 use crate::domain::services::MetricsService;
 use crate::error::{AppError, AppResult};
@@ -30,7 +30,7 @@ pub struct MetricsState {
         ("id" = String, Path, description = "Database ID")
     ),
     responses(
-        (status = 200, description = "Current metrics snapshot", body = MetricsResponse),
+        (status = 200, description = "Current metrics snapshot", body = UnifiedMetricsResponse),
         (status = 400, description = "Database not running"),
         (status = 401, description = "Unauthorized"),
         (status = 403, description = "Forbidden - no access to database"),
@@ -43,7 +43,7 @@ pub async fn get_database_metrics(
     State(state): State<MetricsState>,
     auth_user: AuthUser,
     Path(id): Path<String>,
-) -> AppResult<Json<MetricsResponse>> {
+) -> AppResult<Json<UnifiedMetricsResponse>> {
     if !state
         .metrics_service
         .check_access(&id, auth_user.id())

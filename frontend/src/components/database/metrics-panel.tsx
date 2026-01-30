@@ -1,14 +1,5 @@
-import {
-  ArrowDownIcon,
-  ArrowUpIcon,
-  BarChartIcon,
-  ClockIcon,
-  DatabaseIcon,
-  HardDriveIcon,
-  LinkIcon,
-  TableIcon,
-} from "@hugeicons/core-free-icons";
-import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
+import { BarChartIcon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import * as React from "react";
@@ -21,10 +12,21 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useMetricsStream } from "@/hooks/use-metrics-stream";
 import { databasesApi } from "@/lib/api";
-import type { DatabaseMetrics, MetricsHistoryPoint, TimeRange } from "@/lib/api/types";
+import type {
+  DatabaseMetrics,
+  DatabaseType,
+  KeyValueMetrics,
+  MetricsHistoryPoint,
+  TimeRange,
+  UnifiedMetrics,
+} from "@/lib/api/types";
+
+import { KeyValueMetricsPanel } from "./keyvalue-metrics-panel";
+import { PostgresMetricsPanel } from "./postgres-metrics-panel";
 
 interface MetricsPanelProps {
   databaseId: string;
+  databaseType: DatabaseType;
   isRunning: boolean;
 }
 
@@ -37,89 +39,116 @@ const TIME_RANGES: { value: TimeRange; label: string }[] = [
   { value: "last_24_hours", label: "24 hours" },
 ];
 
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB", "TB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${Number.parseFloat((bytes / k ** i).toFixed(1))} ${sizes[i]}`;
-}
-
 function formatNumber(num: number): string {
   if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
   if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
   return num.toFixed(0);
 }
 
-function formatMs(ms: number): string {
-  if (ms >= 1000) return `${(ms / 1000).toFixed(2)}s`;
-  return `${ms.toFixed(2)}ms`;
-}
-
-interface MetricCardProps {
-  title: string;
-  value: string | number;
-  subtitle?: string;
-  icon: IconSvgElement;
-  trend?: "up" | "down";
-  trendValue?: string;
-}
-
-function MetricCard({ title, value, subtitle, icon, trend, trendValue }: MetricCardProps) {
-  return (
-    <Card>
-      <CardContent className="pt-4">
-        <div className="flex items-start justify-between">
-          <div className="space-y-1">
-            <p className="text-xs text-muted-foreground">{title}</p>
-            <p className="text-2xl font-bold tabular-nums">{value}</p>
-            {subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}
-          </div>
-          <div className="flex flex-col items-end gap-1">
-            <div className="rounded-md bg-muted p-2">
-              <HugeiconsIcon icon={icon} className="size-4 text-muted-foreground" strokeWidth={2} />
-            </div>
-            {trend && trendValue && (
-              <div
-                className={`flex items-center gap-0.5 text-xs ${trend === "up" ? "text-green-500" : "text-red-500"}`}
-              >
-                <HugeiconsIcon
-                  icon={trend === "up" ? ArrowUpIcon : ArrowDownIcon}
-                  className="size-3"
-                  strokeWidth={2}
-                />
-                {trendValue}
-              </div>
-            )}
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
 const chartConfig = {
-  queries: { label: "Queries", color: "hsl(var(--chart-1))" },
-  latency: { label: "Latency", color: "hsl(var(--chart-2))" },
-  cpu: { label: "CPU", color: "hsl(var(--chart-3))" },
-  memory: { label: "Memory", color: "hsl(var(--chart-4))" },
-  rowsRead: { label: "Rows Read", color: "hsl(var(--chart-1))" },
-  rowsWritten: { label: "Rows Written", color: "hsl(var(--chart-2))" },
-  connections: { label: "Connections", color: "hsl(var(--chart-5))" },
+  cpu: { label: "CPU %", color: "#f97316" },
+  memory: { label: "Memory %", color: "#8b5cf6" },
+  queries: { label: "Queries/sec", color: "#3b82f6" },
+  latency: { label: "Latency (ms)", color: "#ef4444" },
+  rowsRead: { label: "Rows Read", color: "#22c55e" },
+  rowsWritten: { label: "Rows Written", color: "#eab308" },
+  connections: { label: "Connections", color: "#06b6d4" },
 };
+
+function isPostgresMetrics(
+  metrics: UnifiedMetrics,
+): metrics is { database_type: "postgres" } & DatabaseMetrics {
+  return metrics.database_type === "postgres";
+}
+
+function isKeyValueMetrics(
+  metrics: UnifiedMetrics,
+): metrics is ({ database_type: "redis" } | { database_type: "valkey" }) & KeyValueMetrics {
+  return metrics.database_type === "redis" || metrics.database_type === "valkey";
+}
+
+const MAX_REALTIME_POINTS = 60;
 
 export const MetricsPanel = React.memo(function MetricsPanel({
   databaseId,
+  databaseType,
   isRunning,
 }: MetricsPanelProps) {
   const [timeRange, setTimeRange] = React.useState<TimeRange>("last_15_min");
   const isRealtime = timeRange === "realtime";
+  const [realtimeBuffer, setRealtimeBuffer] = React.useState<
+    Array<{
+      time: string;
+      timestamp: string;
+      queries: number;
+      latency: number;
+      cpu: number;
+      memory: number;
+      rowsRead: number;
+      rowsWritten: number;
+      connections: number;
+    }>
+  >([]);
 
-  const handleTimeRangeChange = React.useCallback((v: string) => setTimeRange(v as TimeRange), []);
+  const handleTimeRangeChange = React.useCallback((v: string) => {
+    setTimeRange(v as TimeRange);
+    if (v === "realtime") {
+      setRealtimeBuffer([]);
+    }
+  }, []);
 
   const { metrics: realtimeMetrics, isConnected } = useMetricsStream(databaseId, {
     enabled: isRunning && isRealtime,
   });
+
+  React.useEffect(() => {
+    if (realtimeMetrics && isRealtime) {
+      const now = new Date();
+      const point = {
+        time: format(now, "HH:mm:ss"),
+        timestamp: now.toISOString(),
+        queries:
+          realtimeMetrics.database_type === "postgres"
+            ? (realtimeMetrics.queries?.queries_per_sec ?? 0)
+            : 0,
+        latency:
+          realtimeMetrics.database_type === "postgres"
+            ? (realtimeMetrics.queries?.avg_latency_ms ?? 0)
+            : 0,
+        cpu:
+          realtimeMetrics.database_type === "postgres"
+            ? (realtimeMetrics.resources?.cpu_percent ?? 0)
+            : (realtimeMetrics.resources?.cpu_percent ?? 0),
+        memory:
+          realtimeMetrics.database_type === "postgres"
+            ? (realtimeMetrics.resources?.memory_percent ?? 0)
+            : (realtimeMetrics.resources?.memory_percent ?? 0),
+        rowsRead:
+          realtimeMetrics.database_type === "postgres" ? (realtimeMetrics.rows?.rows_read ?? 0) : 0,
+        rowsWritten:
+          realtimeMetrics.database_type === "postgres"
+            ? (realtimeMetrics.rows?.rows_written ?? 0)
+            : 0,
+        connections:
+          realtimeMetrics.database_type === "postgres"
+            ? (realtimeMetrics.connections?.active_connections ?? 0)
+            : (realtimeMetrics.clients?.connected_clients ?? 0),
+      };
+      setRealtimeBuffer((prev) => {
+        const newBuffer = [...prev, point];
+        if (newBuffer.length > MAX_REALTIME_POINTS) {
+          return newBuffer.slice(-MAX_REALTIME_POINTS);
+        }
+        return newBuffer;
+      });
+    }
+  }, [realtimeMetrics, isRealtime]);
+
+  React.useEffect(() => {
+    if (!isRealtime) {
+      setRealtimeBuffer([]);
+    }
+  }, [isRealtime]);
 
   const { data: historyData, isLoading: historyLoading } = useQuery({
     queryKey: ["metricsHistory", databaseId, timeRange],
@@ -137,11 +166,14 @@ export const MetricsPanel = React.memo(function MetricsPanel({
     staleTime: 5000,
   });
 
-  const metrics: DatabaseMetrics | null = isRealtime
+  const metrics: UnifiedMetrics | null = isRealtime
     ? realtimeMetrics
     : (currentMetrics?.metrics ?? null);
 
   const chartData = React.useMemo(() => {
+    if (isRealtime) {
+      return realtimeBuffer;
+    }
     const historyPoints: MetricsHistoryPoint[] = historyData?.points ?? [];
     return historyPoints.map((point) => ({
       time: format(new Date(point.timestamp), "HH:mm:ss"),
@@ -154,7 +186,7 @@ export const MetricsPanel = React.memo(function MetricsPanel({
       rowsWritten: point.rows_written,
       connections: point.active_connections,
     }));
-  }, [historyData?.points]);
+  }, [historyData?.points, isRealtime, realtimeBuffer]);
 
   if (!isRunning) {
     return (
@@ -172,10 +204,10 @@ export const MetricsPanel = React.memo(function MetricsPanel({
   }
 
   const isLoading = isRealtime ? !metrics && !isConnected : currentLoading || historyLoading;
+  const isPostgres = databaseType === "postgres";
 
   return (
     <div className="space-y-6">
-      {/* Time Range Selector */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="text-sm text-muted-foreground">Time Range:</span>
@@ -196,165 +228,37 @@ export const MetricsPanel = React.memo(function MetricsPanel({
         )}
       </div>
 
-      {/* Metric Cards */}
       {isLoading ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Skeleton className="h-24" />
-          <Skeleton className="h-24" />
-          <Skeleton className="h-24" />
-          <Skeleton className="h-24" />
-          <Skeleton className="h-24" />
-          <Skeleton className="h-24" />
-          <Skeleton className="h-24" />
-          <Skeleton className="h-24" />
+          {[...Array(8)].map((_, i) => (
+            <Skeleton key={i} className="h-24" />
+          ))}
         </div>
       ) : metrics ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <MetricCard
-            title="Total Queries"
-            value={formatNumber(metrics.queries.total_queries)}
-            subtitle={`${metrics.queries.queries_per_sec.toFixed(1)}/sec`}
-            icon={DatabaseIcon}
-          />
-          <MetricCard
-            title="Rows Read"
-            value={formatNumber(metrics.rows.rows_read)}
-            subtitle={`${formatNumber(metrics.rows.total_rows)} total rows`}
-            icon={ArrowUpIcon}
-          />
-          <MetricCard
-            title="Rows Written"
-            value={formatNumber(metrics.rows.rows_written)}
-            icon={ArrowDownIcon}
-          />
-          <MetricCard
-            title="Total Tables"
-            value={metrics.tables.total_tables}
-            subtitle={`${metrics.tables.total_indexes} indexes`}
-            icon={TableIcon}
-          />
-          <MetricCard
-            title="Storage Used"
-            value={formatBytes(metrics.storage.database_size_bytes)}
-            subtitle={`${metrics.storage.storage_percent.toFixed(1)}% of limit`}
-            icon={HardDriveIcon}
-          />
-          <MetricCard
-            title="Avg Latency"
-            value={formatMs(metrics.queries.avg_latency_ms)}
-            subtitle={`Max: ${formatMs(metrics.queries.max_latency_ms)}`}
-            icon={ClockIcon}
-          />
-          <MetricCard
-            title="Connections"
-            value={metrics.connections.active_connections}
-            subtitle={`${metrics.connections.idle_connections} idle / ${metrics.connections.max_connections} max`}
-            icon={LinkIcon}
-          />
-        </div>
+        <>
+          {isPostgresMetrics(metrics) ? (
+            <PostgresMetricsPanel metrics={metrics} />
+          ) : isKeyValueMetrics(metrics) ? (
+            <KeyValueMetricsPanel metrics={metrics} databaseType={metrics.database_type} />
+          ) : null}
+        </>
       ) : null}
 
-      {/* Charts */}
-      {!isRealtime && chartData.length > 0 && (
+      {chartData.length > 0 && (
         <div className="grid gap-6 lg:grid-cols-2">
-          {/* Query Latency Chart */}
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium">Query Latency</CardTitle>
+              <CardTitle className="text-sm font-medium">CPU Usage</CardTitle>
             </CardHeader>
             <CardContent>
-              <ChartContainer config={chartConfig} className="h-[200px]">
-                <LineChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis dataKey="time" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
-                  <YAxis
-                    tick={{ fontSize: 10 }}
-                    tickLine={false}
-                    axisLine={false}
-                    tickFormatter={(v) => `${v}ms`}
-                  />
-                  <ChartTooltip content={<ChartTooltipContent />} />
-                  <Line
-                    type="monotone"
-                    dataKey="latency"
-                    stroke="var(--color-latency)"
-                    strokeWidth={2}
-                    dot={false}
-                  />
-                </LineChart>
-              </ChartContainer>
-            </CardContent>
-          </Card>
-
-          {/* Queries/sec Chart */}
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium">Queries per Second</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ChartContainer config={chartConfig} className="h-[200px]">
-                <AreaChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis dataKey="time" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
-                  <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
-                  <ChartTooltip content={<ChartTooltipContent />} />
-                  <Area
-                    type="monotone"
-                    dataKey="queries"
-                    stroke="var(--color-queries)"
-                    fill="var(--color-queries)"
-                    fillOpacity={0.2}
-                    strokeWidth={2}
-                  />
-                </AreaChart>
-              </ChartContainer>
-            </CardContent>
-          </Card>
-
-          {/* Rows Read/Written Chart */}
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium">Rows Read / Written</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ChartContainer config={chartConfig} className="h-[200px]">
-                <LineChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis dataKey="time" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
-                  <YAxis
-                    tick={{ fontSize: 10 }}
-                    tickLine={false}
-                    axisLine={false}
-                    tickFormatter={(v) => formatNumber(v)}
-                  />
-                  <ChartTooltip content={<ChartTooltipContent />} />
-                  <Line
-                    type="monotone"
-                    dataKey="rowsRead"
-                    stroke="var(--color-rowsRead)"
-                    strokeWidth={2}
-                    dot={false}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="rowsWritten"
-                    stroke="var(--color-rowsWritten)"
-                    strokeWidth={2}
-                    dot={false}
-                  />
-                </LineChart>
-              </ChartContainer>
-            </CardContent>
-          </Card>
-
-          {/* Resource Usage Chart */}
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium">Resource Usage</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ChartContainer config={chartConfig} className="h-[200px]">
-                <AreaChart data={chartData}>
+              <ChartContainer config={chartConfig} className="h-[200px] w-full">
+                <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="cpuGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#f97316" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="#f97316" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                   <XAxis dataKey="time" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
                   <YAxis
@@ -363,33 +267,206 @@ export const MetricsPanel = React.memo(function MetricsPanel({
                     axisLine={false}
                     tickFormatter={(v) => `${v}%`}
                     domain={[0, 100]}
+                    width={40}
                   />
                   <ChartTooltip content={<ChartTooltipContent />} />
                   <Area
                     type="monotone"
                     dataKey="cpu"
-                    stroke="var(--color-cpu)"
-                    fill="var(--color-cpu)"
-                    fillOpacity={0.2}
-                    strokeWidth={2}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="memory"
-                    stroke="var(--color-memory)"
-                    fill="var(--color-memory)"
-                    fillOpacity={0.2}
+                    stroke="#f97316"
+                    fill="url(#cpuGradient)"
                     strokeWidth={2}
                   />
                 </AreaChart>
               </ChartContainer>
             </CardContent>
           </Card>
+
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium">Memory Usage</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ChartContainer config={chartConfig} className="h-[200px] w-full">
+                <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="memoryGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                  <XAxis dataKey="time" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
+                  <YAxis
+                    tick={{ fontSize: 10 }}
+                    tickLine={false}
+                    axisLine={false}
+                    tickFormatter={(v) => `${v}%`}
+                    domain={[0, 100]}
+                    width={40}
+                  />
+                  <ChartTooltip content={<ChartTooltipContent />} />
+                  <Area
+                    type="monotone"
+                    dataKey="memory"
+                    stroke="#8b5cf6"
+                    fill="url(#memoryGradient)"
+                    strokeWidth={2}
+                  />
+                </AreaChart>
+              </ChartContainer>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium">
+                {isPostgres ? "Active Connections" : "Connected Clients"}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ChartContainer config={chartConfig} className="h-[200px] w-full">
+                <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="connectionsGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="#06b6d4" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                  <XAxis dataKey="time" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
+                  <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} width={40} />
+                  <ChartTooltip content={<ChartTooltipContent />} />
+                  <Area
+                    type="monotone"
+                    dataKey="connections"
+                    stroke="#06b6d4"
+                    fill="url(#connectionsGradient)"
+                    strokeWidth={2}
+                  />
+                </AreaChart>
+              </ChartContainer>
+            </CardContent>
+          </Card>
+
+          {isPostgres && (
+            <>
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium">Query Latency</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ChartContainer config={chartConfig} className="h-[200px] w-full">
+                    <LineChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                      <XAxis
+                        dataKey="time"
+                        tick={{ fontSize: 10 }}
+                        tickLine={false}
+                        axisLine={false}
+                      />
+                      <YAxis
+                        tick={{ fontSize: 10 }}
+                        tickLine={false}
+                        axisLine={false}
+                        tickFormatter={(v) => `${v}ms`}
+                        width={50}
+                      />
+                      <ChartTooltip content={<ChartTooltipContent />} />
+                      <Line
+                        type="monotone"
+                        dataKey="latency"
+                        stroke="#ef4444"
+                        strokeWidth={2}
+                        dot={false}
+                      />
+                    </LineChart>
+                  </ChartContainer>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium">Queries per Second</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ChartContainer config={chartConfig} className="h-[200px] w-full">
+                    <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="queriesGradient" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                      <XAxis
+                        dataKey="time"
+                        tick={{ fontSize: 10 }}
+                        tickLine={false}
+                        axisLine={false}
+                      />
+                      <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} width={40} />
+                      <ChartTooltip content={<ChartTooltipContent />} />
+                      <Area
+                        type="monotone"
+                        dataKey="queries"
+                        stroke="#3b82f6"
+                        fill="url(#queriesGradient)"
+                        strokeWidth={2}
+                      />
+                    </AreaChart>
+                  </ChartContainer>
+                </CardContent>
+              </Card>
+
+              <Card className="lg:col-span-2">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium">Rows Read / Written</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ChartContainer config={chartConfig} className="h-[200px] w-full">
+                    <LineChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                      <XAxis
+                        dataKey="time"
+                        tick={{ fontSize: 10 }}
+                        tickLine={false}
+                        axisLine={false}
+                      />
+                      <YAxis
+                        tick={{ fontSize: 10 }}
+                        tickLine={false}
+                        axisLine={false}
+                        tickFormatter={(v) => formatNumber(v)}
+                        width={50}
+                      />
+                      <ChartTooltip content={<ChartTooltipContent />} />
+                      <Line
+                        type="monotone"
+                        dataKey="rowsRead"
+                        stroke="#22c55e"
+                        strokeWidth={2}
+                        dot={false}
+                        name="Rows Read"
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="rowsWritten"
+                        stroke="#eab308"
+                        strokeWidth={2}
+                        dot={false}
+                        name="Rows Written"
+                      />
+                    </LineChart>
+                  </ChartContainer>
+                </CardContent>
+              </Card>
+            </>
+          )}
         </div>
       )}
 
-      {/* No data message for charts */}
-      {!isRealtime && chartData.length === 0 && !historyLoading && (
+      {chartData.length === 0 && !historyLoading && !isRealtime && (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-8">
             <p className="text-sm text-muted-foreground">
@@ -397,6 +474,16 @@ export const MetricsPanel = React.memo(function MetricsPanel({
             </p>
             <p className="text-xs text-muted-foreground mt-1">
               Metrics are collected every 15 seconds.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+      {chartData.length === 0 && isRealtime && isConnected && (
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-8">
+            <p className="text-sm text-muted-foreground">Collecting realtime data...</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Charts will appear as metrics are received.
             </p>
           </CardContent>
         </Card>

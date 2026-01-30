@@ -1,7 +1,7 @@
 use sqlx::sqlite::SqlitePool;
 use uuid::Uuid;
 
-use crate::domain::models::{DatabaseMetrics, MetricsHistoryPoint, MetricsSnapshot, TimeRange};
+use crate::domain::models::{MetricsHistoryPoint, MetricsSnapshot, TimeRange, UnifiedMetrics};
 use crate::error::AppResult;
 
 #[derive(Clone)]
@@ -14,52 +14,94 @@ impl MetricsRepository {
         Self { pool }
     }
 
-    /// Save a metrics snapshot for a database
     pub async fn save_snapshot(
         &self,
         database_id: &str,
-        metrics: &DatabaseMetrics,
-    ) -> AppResult<MetricsSnapshot> {
+        database_type: &str,
+        metrics: &UnifiedMetrics,
+    ) -> AppResult<()> {
         let id = Uuid::new_v4().to_string();
 
-        sqlx::query(
-            r#"
-            INSERT INTO metrics_snapshots (
-                id, database_id, timestamp,
-                total_queries, queries_per_sec, avg_latency_ms,
-                rows_read, rows_written,
-                cpu_percent, memory_percent, memory_used_bytes,
-                active_connections, storage_used_bytes
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            "#,
-        )
-        .bind(&id)
-        .bind(database_id)
-        .bind(&metrics.timestamp)
-        .bind(metrics.queries.total_queries)
-        .bind(metrics.queries.queries_per_sec)
-        .bind(metrics.queries.avg_latency_ms)
-        .bind(metrics.rows.rows_read)
-        .bind(metrics.rows.rows_written)
-        .bind(metrics.resources.cpu_percent)
-        .bind(metrics.resources.memory_percent)
-        .bind(metrics.resources.memory_used_bytes)
-        .bind(metrics.connections.active_connections)
-        .bind(metrics.storage.database_size_bytes)
-        .execute(&self.pool)
-        .await?;
-
-        let snapshot =
-            sqlx::query_as::<_, MetricsSnapshot>(r#"SELECT * FROM metrics_snapshots WHERE id = ?"#)
+        match metrics {
+            UnifiedMetrics::Postgres(m) => {
+                sqlx::query(
+                    r#"
+                    INSERT INTO metrics_snapshots (
+                        id, database_id, database_type, timestamp,
+                        total_queries, queries_per_sec, avg_latency_ms,
+                        rows_read, rows_written,
+                        cpu_percent, memory_percent, memory_used_bytes,
+                        active_connections, storage_used_bytes
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    "#,
+                )
                 .bind(&id)
-                .fetch_one(&self.pool)
+                .bind(database_id)
+                .bind(database_type)
+                .bind(&m.timestamp)
+                .bind(m.queries.total_queries)
+                .bind(m.queries.queries_per_sec)
+                .bind(m.queries.avg_latency_ms)
+                .bind(m.rows.rows_read)
+                .bind(m.rows.rows_written)
+                .bind(m.resources.cpu_percent)
+                .bind(m.resources.memory_percent)
+                .bind(m.resources.memory_used_bytes)
+                .bind(m.connections.active_connections)
+                .bind(m.storage.database_size_bytes)
+                .execute(&self.pool)
                 .await?;
+            },
+            UnifiedMetrics::Redis(m) | UnifiedMetrics::Valkey(m) => {
+                let db_type = match metrics {
+                    UnifiedMetrics::Redis(_) => "redis",
+                    UnifiedMetrics::Valkey(_) => "valkey",
+                    _ => database_type,
+                };
+                sqlx::query(
+                    r#"
+                    INSERT INTO metrics_snapshots (
+                        id, database_id, database_type, timestamp,
+                        total_queries, queries_per_sec, avg_latency_ms,
+                        rows_read, rows_written,
+                        cpu_percent, memory_percent, memory_used_bytes,
+                        active_connections, storage_used_bytes,
+                        total_keys, keyspace_hits, keyspace_misses,
+                        total_commands, ops_per_sec, used_memory, connected_clients
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    "#,
+                )
+                .bind(&id)
+                .bind(database_id)
+                .bind(db_type)
+                .bind(&m.timestamp)
+                .bind(0i64)
+                .bind(m.commands.ops_per_sec)
+                .bind(0.0f64)
+                .bind(0i64)
+                .bind(0i64)
+                .bind(m.resources.cpu_percent)
+                .bind(m.resources.memory_percent)
+                .bind(m.resources.memory_used_bytes)
+                .bind(m.clients.connected_clients)
+                .bind(m.memory.used_memory)
+                .bind(m.keys.total_keys)
+                .bind(m.commands.keyspace_hits)
+                .bind(m.commands.keyspace_misses)
+                .bind(m.commands.total_commands)
+                .bind(m.commands.ops_per_sec)
+                .bind(m.memory.used_memory)
+                .bind(m.clients.connected_clients)
+                .execute(&self.pool)
+                .await?;
+            },
+        }
 
-        Ok(snapshot)
+        Ok(())
     }
 
-    /// Get metrics history for a database within a time range
     pub async fn get_history(
         &self,
         database_id: &str,
@@ -68,13 +110,9 @@ impl MetricsRepository {
         let duration_secs = time_range.duration_secs();
         let interval_secs = time_range.interval_secs();
 
-        // Calculate the start time based on the time range
         let start_time = format!("-{} seconds", duration_secs);
 
-        // For larger time ranges, we need to aggregate/sample the data
-        // We use window functions to pick representative samples at the desired interval
         let snapshots = if interval_secs > 15 {
-            // For intervals larger than our collection interval, we sample
             sqlx::query_as::<_, MetricsSnapshot>(
                 r#"
                 WITH numbered AS (
@@ -104,10 +142,12 @@ impl MetricsRepository {
             .fetch_all(&self.pool)
             .await?
         } else {
-            // For small intervals, return all data points
             sqlx::query_as::<_, MetricsSnapshot>(
                 r#"
-                SELECT * FROM metrics_snapshots
+                SELECT id, database_id, timestamp, total_queries, queries_per_sec, avg_latency_ms,
+                       rows_read, rows_written, cpu_percent, memory_percent, memory_used_bytes,
+                       active_connections, storage_used_bytes
+                FROM metrics_snapshots
                 WHERE database_id = ?
                 AND timestamp >= datetime('now', ?)
                 ORDER BY timestamp ASC
@@ -122,11 +162,13 @@ impl MetricsRepository {
         Ok(snapshots.into_iter().map(|s| s.into()).collect())
     }
 
-    /// Get the most recent metrics snapshot for a database
     pub async fn get_latest(&self, database_id: &str) -> AppResult<Option<MetricsSnapshot>> {
         let snapshot = sqlx::query_as::<_, MetricsSnapshot>(
             r#"
-            SELECT * FROM metrics_snapshots
+            SELECT id, database_id, timestamp, total_queries, queries_per_sec, avg_latency_ms,
+                   rows_read, rows_written, cpu_percent, memory_percent, memory_used_bytes,
+                   active_connections, storage_used_bytes
+            FROM metrics_snapshots
             WHERE database_id = ?
             ORDER BY timestamp DESC
             LIMIT 1
@@ -139,8 +181,6 @@ impl MetricsRepository {
         Ok(snapshot)
     }
 
-    /// Clean up old metrics snapshots (older than 24 hours)
-    /// This is also done via trigger, but can be called manually
     pub async fn cleanup_old_snapshots(&self) -> AppResult<u64> {
         let result = sqlx::query(
             r#"
@@ -154,7 +194,6 @@ impl MetricsRepository {
         Ok(result.rows_affected())
     }
 
-    /// Get count of metrics snapshots for a database
     pub async fn count_by_database(&self, database_id: &str) -> AppResult<i64> {
         let count: (i64,) =
             sqlx::query_as(r#"SELECT COUNT(*) FROM metrics_snapshots WHERE database_id = ?"#)
@@ -165,7 +204,6 @@ impl MetricsRepository {
         Ok(count.0)
     }
 
-    /// Delete all metrics for a database (called when database is deleted)
     pub async fn delete_by_database(&self, database_id: &str) -> AppResult<u64> {
         let result = sqlx::query(r#"DELETE FROM metrics_snapshots WHERE database_id = ?"#)
             .bind(database_id)

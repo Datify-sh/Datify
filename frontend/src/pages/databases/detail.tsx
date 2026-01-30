@@ -542,7 +542,7 @@ export function DatabaseDetailPage() {
   });
 
   const { metrics: realtimeMetrics } = useMetricsStream(id ?? "", {
-    enabled: !!id && database?.status === "running" && database?.database_type === "postgres",
+    enabled: !!id && database?.status === "running",
   });
 
   const startMutation = useMutation({
@@ -664,8 +664,14 @@ export function DatabaseDetailPage() {
   const isTransitioning = database.status === "starting" || database.status === "stopping";
   const isActionLoading = startMutation.isPending || stopMutation.isPending;
 
-  // Use realtime storage when available, fallback to database response
-  const storageUsedBytes = realtimeMetrics?.storage?.database_size_bytes ?? 0;
+  const getStorageUsedBytes = () => {
+    if (!realtimeMetrics) return 0;
+    if (realtimeMetrics.database_type === "postgres") {
+      return realtimeMetrics.storage?.database_size_bytes ?? 0;
+    }
+    return realtimeMetrics.memory?.used_memory ?? 0;
+  };
+  const storageUsedBytes = getStorageUsedBytes();
   const storageUsed =
     storageUsedBytes > 0
       ? Math.round(storageUsedBytes / (1024 * 1024))
@@ -845,12 +851,10 @@ export function DatabaseDetailPage() {
               Branches
             </TabsTrigger>
           )}
-          {!isKeyValue && (
-            <TabsTrigger value="metrics">
-              <HugeiconsIcon icon={BarChartIcon} className="size-4" strokeWidth={2} />
-              Metrics
-            </TabsTrigger>
-          )}
+          <TabsTrigger value="metrics">
+            <HugeiconsIcon icon={BarChartIcon} className="size-4" strokeWidth={2} />
+            Metrics
+          </TabsTrigger>
           <TabsTrigger value="terminal">
             <HugeiconsIcon icon={CommandLineIcon} className="size-4" strokeWidth={2} />
             Terminal
@@ -879,14 +883,16 @@ export function DatabaseDetailPage() {
           </TabsContent>
         )}
 
-        {!isKeyValue && (
-          <TabsContent value="metrics" className="mt-6">
-            <div className="space-y-6">
-              <MetricsPanel databaseId={database.id} isRunning={isRunning} />
-              <QueryLogsPanel databaseId={database.id} isRunning={isRunning} />
-            </div>
-          </TabsContent>
-        )}
+        <TabsContent value="metrics" className="mt-6">
+          <div className="space-y-6">
+            <MetricsPanel
+              databaseId={database.id}
+              databaseType={database.database_type}
+              isRunning={isRunning}
+            />
+            {!isKeyValue && <QueryLogsPanel databaseId={database.id} isRunning={isRunning} />}
+          </div>
+        </TabsContent>
 
         <TabsContent value="terminal" className="mt-6">
           {isRunning ? (

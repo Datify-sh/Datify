@@ -1,5 +1,5 @@
 import { databasesApi } from "@/lib/api";
-import type { DatabaseMetrics, MetricsStreamMessage } from "@/lib/api/types";
+import type { MetricsStreamMessage, UnifiedMetrics } from "@/lib/api/types";
 import * as React from "react";
 
 interface UseMetricsStreamOptions {
@@ -7,7 +7,7 @@ interface UseMetricsStreamOptions {
 }
 
 interface UseMetricsStreamResult {
-  metrics: DatabaseMetrics | null;
+  metrics: UnifiedMetrics | null;
   isConnected: boolean;
   isConnecting: boolean;
   error: string | null;
@@ -22,7 +22,7 @@ export function useMetricsStream(
 ): UseMetricsStreamResult {
   const { enabled = true } = options;
 
-  const [metrics, setMetrics] = React.useState<DatabaseMetrics | null>(null);
+  const [metrics, setMetrics] = React.useState<UnifiedMetrics | null>(null);
   const [isConnected, setIsConnected] = React.useState(false);
   const [isConnecting, setIsConnecting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
