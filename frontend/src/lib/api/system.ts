@@ -1,4 +1,9 @@
-import type { PostgresVersionsResponse, SystemInfoResponse, ValkeyVersionsResponse } from "./types";
+import type {
+  PostgresVersionsResponse,
+  RedisVersionsResponse,
+  SystemInfoResponse,
+  ValkeyVersionsResponse,
+} from "./types";
 
 export const systemApi = {
   getInfo: async (): Promise<SystemInfoResponse> => {
@@ -21,6 +26,14 @@ export const systemApi = {
     const response = await fetch("/system/valkey-versions");
     if (!response.ok) {
       throw new Error("Failed to fetch Valkey versions");
+    }
+    return response.json();
+  },
+
+  getRedisVersions: async (): Promise<RedisVersionsResponse> => {
+    const response = await fetch("/system/redis-versions");
+    if (!response.ok) {
+      throw new Error("Failed to fetch Redis versions");
     }
     return response.json();
   },

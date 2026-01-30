@@ -68,7 +68,7 @@ export interface PaginatedResponse<T> {
 }
 
 export type PostgresVersion = string;
-export type DatabaseType = "postgres" | "valkey";
+export type DatabaseType = "postgres" | "valkey" | "redis";
 
 export interface ResourceLimits {
   cpu_limit: number;
@@ -90,6 +90,7 @@ export interface CreateDatabaseRequest {
   database_type?: DatabaseType;
   postgres_version?: string;
   valkey_version?: string;
+  redis_version?: string;
   password?: string;
   cpu_limit?: number;
   memory_limit_mb?: number;
@@ -124,6 +125,7 @@ export interface DatabaseResponse {
   database_type: DatabaseType;
   postgres_version: string;
   valkey_version?: string | null;
+  redis_version?: string | null;
   status: string;
   resources: ResourceLimits;
   storage_used_mb?: number;
@@ -210,6 +212,17 @@ export interface ValkeyVersionInfo {
 
 export interface ValkeyVersionsResponse {
   versions: ValkeyVersionInfo[];
+  default_version: string;
+}
+
+export interface RedisVersionInfo {
+  version: string;
+  tag: string;
+  is_latest: boolean;
+}
+
+export interface RedisVersionsResponse {
+  versions: RedisVersionInfo[];
   default_version: string;
 }
 

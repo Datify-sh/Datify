@@ -193,7 +193,9 @@ function DatabaseRow({
             <span className="font-mono">
               {database.database_type === "valkey"
                 ? `Valkey ${database.valkey_version}`
-                : `PostgreSQL ${database.postgres_version}`}
+                : database.database_type === "redis"
+                  ? `Redis ${database.redis_version}`
+                  : `PostgreSQL ${database.postgres_version}`}
             </span>
           </div>
         </div>
@@ -325,10 +327,18 @@ export function ProjectDetailPage() {
     staleTime: 1000 * 60 * 60,
   });
 
+  const { data: redisVersionsData } = useQuery({
+    queryKey: ["redis-versions"],
+    queryFn: () => systemApi.getRedisVersions(),
+    staleTime: 1000 * 60 * 60,
+  });
+
   const postgresVersions = postgresVersionsData?.versions || [];
   const defaultPostgresVersion = postgresVersionsData?.default_version || "16";
   const valkeyVersions = valkeyVersionsData?.versions || [];
   const defaultValkeyVersion = valkeyVersionsData?.default_version || "8.0";
+  const redisVersions = redisVersionsData?.versions || [];
+  const defaultRedisVersion = redisVersionsData?.default_version || "7.4";
 
   const createMutation = useMutation({
     mutationFn: (data: {
@@ -336,6 +346,7 @@ export function ProjectDetailPage() {
       database_type?: DatabaseType;
       postgres_version?: string;
       valkey_version?: string;
+      redis_version?: string;
       password?: string;
       public_exposed?: boolean;
     }) => {
@@ -367,6 +378,8 @@ export function ProjectDetailPage() {
         databaseType === "postgres" ? (formData.get("postgres_version") as string) : undefined,
       valkey_version:
         databaseType === "valkey" ? (formData.get("valkey_version") as string) : undefined,
+      redis_version:
+        databaseType === "redis" ? (formData.get("redis_version") as string) : undefined,
       password: password || undefined,
       public_exposed: publicExposed,
     });
@@ -545,10 +558,11 @@ export function ProjectDetailPage() {
                   <SelectContent>
                     <SelectItem value="postgres">PostgreSQL</SelectItem>
                     <SelectItem value="valkey">Valkey</SelectItem>
+                    <SelectItem value="redis">Redis</SelectItem>
                   </SelectContent>
                 </Select>
               </Field>
-              {databaseType === "postgres" ? (
+              {databaseType === "postgres" && (
                 <Field>
                   <FieldLabel>PostgreSQL Version</FieldLabel>
                   <Select name="postgres_version" defaultValue={defaultPostgresVersion}>
@@ -565,7 +579,8 @@ export function ProjectDetailPage() {
                     </SelectContent>
                   </Select>
                 </Field>
-              ) : (
+              )}
+              {databaseType === "valkey" && (
                 <Field>
                   <FieldLabel>Valkey Version</FieldLabel>
                   <Select name="valkey_version" defaultValue={defaultValkeyVersion}>
@@ -576,6 +591,24 @@ export function ProjectDetailPage() {
                       {valkeyVersions.map((v) => (
                         <SelectItem key={v.version} value={v.version}>
                           Valkey {v.version}
+                          {v.is_latest ? " (Latest)" : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </Field>
+              )}
+              {databaseType === "redis" && (
+                <Field>
+                  <FieldLabel>Redis Version</FieldLabel>
+                  <Select name="redis_version" defaultValue={defaultRedisVersion}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {redisVersions.map((v) => (
+                        <SelectItem key={v.version} value={v.version}>
+                          Redis {v.version}
                           {v.is_latest ? " (Latest)" : ""}
                         </SelectItem>
                       ))}

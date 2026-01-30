@@ -143,13 +143,14 @@ const LogsPanel = React.memo(function LogsPanel({ databaseId }: { databaseId: st
 const TerminalPanel = React.memo(function TerminalPanel({
   databaseId,
   type,
-}: { databaseId: string; type: "shell" | "psql" | "valkey-cli" }) {
+}: { databaseId: string; type: "shell" | "psql" | "valkey-cli" | "redis-cli" }) {
   const [isConnected, setIsConnected] = React.useState(false);
   const [key, setKey] = React.useState(0);
 
   const wsUrl = React.useMemo(() => {
     if (type === "psql") return databasesApi.getPsqlUrl(databaseId);
     if (type === "valkey-cli") return databasesApi.getValkeyCliUrl(databaseId);
+    if (type === "redis-cli") return databasesApi.getRedisCliUrl(databaseId);
     return databasesApi.getTerminalUrl(databaseId);
   }, [type, databaseId]);
 
@@ -508,7 +509,9 @@ export function DatabaseDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [terminalType, setTerminalType] = React.useState<"shell" | "psql" | "valkey-cli">("psql");
+  const [terminalType, setTerminalType] = React.useState<
+    "shell" | "psql" | "valkey-cli" | "redis-cli"
+  >("psql");
   const [isCreateBranchOpen, setIsCreateBranchOpen] = React.useState(false);
 
   const {
@@ -539,7 +542,7 @@ export function DatabaseDetailPage() {
   });
 
   const { metrics: realtimeMetrics } = useMetricsStream(id ?? "", {
-    enabled: !!id && database?.status === "running" && database?.database_type !== "valkey",
+    enabled: !!id && database?.status === "running" && database?.database_type === "postgres",
   });
 
   const startMutation = useMutation({
@@ -669,8 +672,10 @@ export function DatabaseDetailPage() {
       : (database.storage_used_mb ?? 0);
   const storagePercent = (storageUsed / database.resources.storage_limit_mb) * 100;
 
+  const isKeyValue = database.database_type === "valkey" || database.database_type === "redis";
   const isValkey = database.database_type === "valkey";
-  const hasBranches = database.branch !== undefined && !isValkey;
+  const isRedis = database.database_type === "redis";
+  const hasBranches = database.branch !== undefined && !isKeyValue;
   const isChildBranch = database.branch?.parent_id != null;
 
   return (
@@ -705,7 +710,9 @@ export function DatabaseDetailPage() {
             <span className="font-mono">
               {database.database_type === "valkey"
                 ? `Valkey ${database.valkey_version}`
-                : `PostgreSQL ${database.postgres_version}`}
+                : database.database_type === "redis"
+                  ? `Redis ${database.redis_version}`
+                  : `PostgreSQL ${database.postgres_version}`}
             </span>
             {project && (
               <>
@@ -838,7 +845,7 @@ export function DatabaseDetailPage() {
               Branches
             </TabsTrigger>
           )}
-          {!isValkey && (
+          {!isKeyValue && (
             <TabsTrigger value="metrics">
               <HugeiconsIcon icon={BarChartIcon} className="size-4" strokeWidth={2} />
               Metrics
@@ -872,7 +879,7 @@ export function DatabaseDetailPage() {
           </TabsContent>
         )}
 
-        {!isValkey && (
+        {!isKeyValue && (
           <TabsContent value="metrics" className="mt-6">
             <div className="space-y-6">
               <MetricsPanel databaseId={database.id} isRunning={isRunning} />
@@ -885,7 +892,7 @@ export function DatabaseDetailPage() {
           {isRunning ? (
             <div className="space-y-4">
               <div className="flex items-center gap-2">
-                {isValkey ? (
+                {isValkey && (
                   <Button
                     variant={terminalType === "valkey-cli" ? "default" : "outline"}
                     size="sm"
@@ -893,7 +900,17 @@ export function DatabaseDetailPage() {
                   >
                     Valkey CLI
                   </Button>
-                ) : (
+                )}
+                {isRedis && (
+                  <Button
+                    variant={terminalType === "redis-cli" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setTerminalType("redis-cli")}
+                  >
+                    Redis CLI
+                  </Button>
+                )}
+                {!isKeyValue && (
                   <Button
                     variant={terminalType === "psql" ? "default" : "outline"}
                     size="sm"
@@ -912,7 +929,13 @@ export function DatabaseDetailPage() {
               </div>
               <TerminalPanel
                 databaseId={database.id}
-                type={isValkey && terminalType === "psql" ? "valkey-cli" : terminalType}
+                type={
+                  isValkey && terminalType === "psql"
+                    ? "valkey-cli"
+                    : isRedis && terminalType === "psql"
+                      ? "redis-cli"
+                      : terminalType
+                }
               />
             </div>
           ) : (
