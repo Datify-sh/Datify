@@ -321,7 +321,11 @@ function DatabaseItem({
               />
               <span className="truncate font-mono text-xs">{database.name}</span>
               <span className="ml-auto text-[9px] text-muted-foreground uppercase">
-                {database.database_type === "valkey" ? "valkey" : "pg"}
+                {database.database_type === "valkey"
+                  ? "valkey"
+                  : database.database_type === "redis"
+                    ? "redis"
+                    : "pg"}
               </span>
             </SidebarMenuSubButton>
           )}
@@ -353,7 +357,11 @@ function DatabaseItem({
                 <span className="truncate font-mono text-xs">{database.name}</span>
                 <span className="ml-auto flex items-center gap-1.5">
                   <span className="text-[9px] text-muted-foreground uppercase">
-                    {database.database_type === "valkey" ? "valkey" : "pg"}
+                    {database.database_type === "valkey"
+                      ? "valkey"
+                      : database.database_type === "redis"
+                        ? "redis"
+                        : "pg"}
                   </span>
                   <span className="text-[10px] text-muted-foreground">{branches.length}</span>
                 </span>
@@ -382,7 +390,11 @@ function DatabaseItem({
                       {branch.branch?.name || branch.name}
                     </span>
                     <span className="ml-auto text-[9px] text-muted-foreground uppercase">
-                      {branch.database_type === "valkey" ? "valkey" : "pg"}
+                      {branch.database_type === "valkey"
+                        ? "valkey"
+                        : branch.database_type === "redis"
+                          ? "redis"
+                          : "pg"}
                     </span>
                   </SidebarMenuSubButton>
                 )}

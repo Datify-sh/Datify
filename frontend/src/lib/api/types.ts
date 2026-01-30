@@ -191,6 +191,7 @@ export interface ReadyResponse {
 export interface SystemInfoResponse {
   cpu_cores: number;
   total_memory_mb: number;
+  public_host: string;
 }
 
 export interface PostgresVersionInfo {

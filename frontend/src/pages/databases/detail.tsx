@@ -193,6 +193,12 @@ const ConnectionPanel = React.memo(function ConnectionPanel({
   const connection = database.connection;
   const [showPassword, setShowPassword] = React.useState(false);
 
+  const { data: systemInfo } = useQuery({
+    queryKey: ["system-info"],
+    queryFn: () => systemApi.getInfo(),
+    staleTime: 5 * 60 * 1000,
+  });
+
   const copyToClipboard = React.useCallback((text: string, label: string) => {
     navigator.clipboard.writeText(text);
     toast.success(`${label} copied`);
@@ -215,6 +221,16 @@ const ConnectionPanel = React.memo(function ConnectionPanel({
     );
   }
 
+  const publicHost = systemInfo?.public_host;
+  const displayHost =
+    database.public_exposed && publicHost && publicHost !== "localhost"
+      ? publicHost
+      : connection.host;
+  const displayConnectionString =
+    database.public_exposed && publicHost && publicHost !== "localhost"
+      ? connection.connection_string.replace(connection.host, publicHost)
+      : connection.connection_string;
+
   return (
     <div className="space-y-6">
       <Card>
@@ -224,11 +240,11 @@ const ConnectionPanel = React.memo(function ConnectionPanel({
         </CardHeader>
         <CardContent>
           <div className="flex gap-2">
-            <Input value={connection.connection_string} readOnly className="font-mono text-xs" />
+            <Input value={displayConnectionString} readOnly className="font-mono text-xs" />
             <Button
               variant="outline"
               size="icon"
-              onClick={() => copyToClipboard(connection.connection_string, "Connection string")}
+              onClick={() => copyToClipboard(displayConnectionString, "Connection string")}
             >
               <HugeiconsIcon icon={Copy01Icon} className="size-4" strokeWidth={2} />
             </Button>
@@ -238,7 +254,7 @@ const ConnectionPanel = React.memo(function ConnectionPanel({
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {[
-          { label: "Host", value: connection.host },
+          { label: "Host", value: displayHost },
           { label: "Port", value: String(connection.port) },
           { label: "Database", value: connection.database },
           { label: "Username", value: connection.username },
