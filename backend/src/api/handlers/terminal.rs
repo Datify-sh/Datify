@@ -396,18 +396,112 @@ async fn handle_valkey_cli_terminal(
     container_id: String,
     _password: String,
 ) {
+    handle_kv_cli_terminal(
+        socket,
+        state,
+        container_id,
+        vec!["valkey-cli"],
+        "valkey-cli",
+    )
+    .await;
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/v1/databases/{id}/redis-cli",
+    params(
+        ("id" = String, Path, description = "Database ID")
+    ),
+    responses(
+        (status = 101, description = "WebSocket connection established for redis-cli terminal"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden - no access to database"),
+        (status = 404, description = "Database or container not found"),
+        (status = 409, description = "Container is not running or not a Redis database")
+    ),
+    tag = "Terminal",
+    security(("bearer" = []))
+)]
+pub async fn database_redis_cli(
+    State(state): State<TerminalState>,
+    auth_user: AuthUser,
+    Path(id): Path<String>,
+    ws: WebSocketUpgrade,
+) -> Result<impl IntoResponse, AppError> {
+    if !state
+        .database_service
+        .check_access(&id, auth_user.id())
+        .await?
+    {
+        return Err(AppError::Forbidden);
+    }
+
+    let database = state
+        .database_service
+        .get_by_id(&id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("Database '{}' not found", id)))?;
+
+    if database.database_type != "redis" {
+        return Err(AppError::Conflict(
+            "This endpoint is only for Redis databases".to_string(),
+        ));
+    }
+
+    let container_id = database
+        .container_id
+        .ok_or_else(|| AppError::NotFound("Database has no container".to_string()))?;
+
+    let status = state.docker.get_container_status(&container_id).await?;
+    if status != "running" {
+        return Err(AppError::Conflict(format!(
+            "Container is not running (status: {})",
+            status
+        )));
+    }
+
+    let password = database
+        .password_encrypted
+        .as_ref()
+        .map(|_| "********".to_string())
+        .unwrap_or_default();
+
+    tracing::info!(
+        user_id = %auth_user.id(),
+        user_email = %auth_user.email(),
+        database_id = %id,
+        container_id = %container_id,
+        session_type = "redis-cli",
+        "Redis CLI session started"
+    );
+
+    Ok(ws
+        .on_upgrade(move |socket| handle_redis_cli_terminal(socket, state, container_id, password)))
+}
+
+async fn handle_redis_cli_terminal(
+    socket: WebSocket,
+    state: TerminalState,
+    container_id: String,
+    _password: String,
+) {
+    handle_kv_cli_terminal(socket, state, container_id, vec!["redis-cli"], "redis-cli").await;
+}
+
+async fn handle_kv_cli_terminal(
+    socket: WebSocket,
+    state: TerminalState,
+    container_id: String,
+    cmd: Vec<&str>,
+    cli_name: &str,
+) {
     let (mut ws_sender, mut ws_receiver) = socket.split();
 
-    let valkey_cmd = vec!["valkey-cli"];
-    let exec_id = match state
-        .docker
-        .create_exec(&container_id, valkey_cmd, true)
-        .await
-    {
+    let exec_id = match state.docker.create_exec(&container_id, cmd, true).await {
         Ok(id) => id,
         Err(e) => {
             let msg = TerminalOutputMessage::Error {
-                message: format!("Failed to create valkey-cli session: {}", e),
+                message: format!("Failed to create {} session: {}", cli_name, e),
             };
             let json = serde_json::to_string(&msg).unwrap();
             let _ = ws_sender.send(Message::Text(json.into())).await;
@@ -438,7 +532,7 @@ async fn handle_valkey_cli_terminal(
         Ok(result) => result,
         Err(e) => {
             let msg = TerminalOutputMessage::Error {
-                message: format!("Failed to start valkey-cli: {}", e),
+                message: format!("Failed to start {}: {}", cli_name, e),
             };
             let json = serde_json::to_string(&msg).unwrap();
             let _ = ws_sender.send(Message::Text(json.into())).await;

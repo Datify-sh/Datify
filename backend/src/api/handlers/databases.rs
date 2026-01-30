@@ -46,6 +46,7 @@ pub async fn create_database(
             &payload.database_type,
             &payload.postgres_version,
             payload.valkey_version.as_deref(),
+            payload.redis_version.as_deref(),
             payload.password.as_deref(),
             payload.cpu_limit,
             payload.memory_limit_mb,

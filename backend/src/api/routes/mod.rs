@@ -92,7 +92,8 @@ pub async fn create_router(
         .route(
             "/system/valkey-versions",
             get(handlers::get_valkey_versions),
-        );
+        )
+        .route("/system/redis-versions", get(handlers::get_redis_versions));
 
     let auth_routes = Router::new()
         .route("/register", post(handlers::register))
@@ -180,6 +181,7 @@ pub async fn create_router(
         .route("/{id}/terminal", get(handlers::database_terminal))
         .route("/{id}/psql", get(handlers::database_psql))
         .route("/{id}/valkey-cli", get(handlers::database_valkey_cli))
+        .route("/{id}/redis-cli", get(handlers::database_redis_cli))
         .with_state(terminal_state);
 
     let metrics_routes = Router::new()

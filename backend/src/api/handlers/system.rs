@@ -35,6 +35,19 @@ pub struct ValkeyVersionsResponse {
     pub default_version: String,
 }
 
+#[derive(Debug, Clone, Serialize, ToSchema)]
+pub struct RedisVersionInfo {
+    pub version: String,
+    pub tag: String,
+    pub is_latest: bool,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct RedisVersionsResponse {
+    pub versions: Vec<RedisVersionInfo>,
+    pub default_version: String,
+}
+
 #[derive(Debug, Deserialize)]
 struct DockerHubResponse {
     results: Vec<DockerHubTag>,
@@ -55,6 +68,9 @@ static POSTGRES_VERSION_CACHE: Lazy<RwLock<Option<VersionCache<PostgresVersionIn
     Lazy::new(|| RwLock::new(None));
 
 static VALKEY_VERSION_CACHE: Lazy<RwLock<Option<VersionCache<ValkeyVersionInfo>>>> =
+    Lazy::new(|| RwLock::new(None));
+
+static REDIS_VERSION_CACHE: Lazy<RwLock<Option<VersionCache<RedisVersionInfo>>>> =
     Lazy::new(|| RwLock::new(None));
 
 async fn fetch_docker_hub_tags(repo: &str, pages: usize) -> Result<Vec<String>, reqwest::Error> {
@@ -146,6 +162,49 @@ async fn fetch_valkey_versions() -> Result<Vec<ValkeyVersionInfo>, reqwest::Erro
     Ok(versions)
 }
 
+async fn fetch_redis_versions() -> Result<Vec<RedisVersionInfo>, reqwest::Error> {
+    let all_tags = fetch_docker_hub_tags("library/redis", 3).await?;
+
+    let mut versions: Vec<(u32, u32)> = all_tags
+        .iter()
+        .filter(|tag| tag.ends_with("-alpine"))
+        .filter_map(|tag| {
+            let version_part = tag.trim_end_matches("-alpine");
+            let parts: Vec<&str> = version_part.split('.').collect();
+            if parts.len() >= 2 {
+                let major = parts[0].parse::<u32>().ok()?;
+                let minor = parts[1].parse::<u32>().ok()?;
+                if major >= 6 {
+                    Some((major, minor))
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    versions.sort();
+    versions.dedup();
+
+    let latest_version = versions.last().copied();
+
+    let versions = versions
+        .into_iter()
+        .map(|(major, minor)| {
+            let version = format!("{}.{}", major, minor);
+            RedisVersionInfo {
+                tag: format!("redis:{}-alpine", version),
+                is_latest: Some((major, minor)) == latest_version,
+                version,
+            }
+        })
+        .collect();
+
+    Ok(versions)
+}
+
 #[utoipa::path(
     get,
     path = "/system/postgres-versions",
@@ -227,5 +286,47 @@ pub async fn get_valkey_versions() -> Json<ValkeyVersionsResponse> {
     Json(ValkeyVersionsResponse {
         versions,
         default_version: "8.0".to_string(),
+    })
+}
+
+#[utoipa::path(
+    get,
+    path = "/system/redis-versions",
+    responses(
+        (status = 200, description = "Available Redis versions", body = RedisVersionsResponse)
+    ),
+    tag = "System"
+)]
+pub async fn get_redis_versions() -> Json<RedisVersionsResponse> {
+    {
+        let cache = REDIS_VERSION_CACHE.read().await;
+        if let Some(ref cached) = *cache {
+            if cached.fetched_at.elapsed() < CACHE_TTL {
+                return Json(RedisVersionsResponse {
+                    versions: cached.versions.clone(),
+                    default_version: "7.4".to_string(),
+                });
+            }
+        }
+    }
+
+    let versions = match fetch_redis_versions().await {
+        Ok(v) => {
+            let mut cache = REDIS_VERSION_CACHE.write().await;
+            *cache = Some(VersionCache {
+                versions: v.clone(),
+                fetched_at: Instant::now(),
+            });
+            v
+        },
+        Err(e) => {
+            tracing::warn!("Failed to fetch Redis versions from Docker Hub: {}", e);
+            vec![]
+        },
+    };
+
+    Json(RedisVersionsResponse {
+        versions,
+        default_version: "7.4".to_string(),
     })
 }

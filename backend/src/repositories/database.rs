@@ -6,7 +6,7 @@ use crate::domain::models::Database;
 use crate::error::{AppError, AppResult};
 
 const DATABASE_COLUMNS: &str = r#"
-    id, project_id, name, database_type, postgres_version, valkey_version,
+    id, project_id, name, database_type, postgres_version, valkey_version, redis_version,
     container_id, container_status, host, port, username, password_encrypted,
     cpu_limit, memory_limit_mb, storage_limit_mb, public_exposed,
     created_at, updated_at, parent_branch_id, branch_name, is_default_branch, forked_at
@@ -30,6 +30,7 @@ impl DatabaseRepository {
         database_type: &str,
         postgres_version: &str,
         valkey_version: Option<&str>,
+        redis_version: Option<&str>,
         cpu_limit: f64,
         memory_limit_mb: i32,
         storage_limit_mb: i32,
@@ -46,8 +47,8 @@ impl DatabaseRepository {
 
         sqlx::query(
             r#"
-            INSERT INTO databases (id, project_id, name, database_type, postgres_version, valkey_version, cpu_limit, memory_limit_mb, storage_limit_mb, branch_name, is_default_branch, parent_branch_id, forked_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO databases (id, project_id, name, database_type, postgres_version, valkey_version, redis_version, cpu_limit, memory_limit_mb, storage_limit_mb, branch_name, is_default_branch, parent_branch_id, forked_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             "#,
         )
         .bind(&id)
@@ -56,6 +57,7 @@ impl DatabaseRepository {
         .bind(database_type)
         .bind(postgres_version)
         .bind(valkey_version)
+        .bind(redis_version)
         .bind(cpu_limit)
         .bind(memory_limit_mb)
         .bind(storage_limit_mb)
