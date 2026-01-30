@@ -73,8 +73,8 @@ export function CreateProjectDialog({ open, onOpenChange }: CreateProjectDialogP
 
             <Field>
               <FieldLabel>Project Name</FieldLabel>
-              <Input name="name" placeholder="my-project" required autoFocus />
-              <FieldDescription>Use lowercase letters, numbers, and hyphens</FieldDescription>
+              <Input name="name" placeholder="My Project" required autoFocus />
+              <FieldDescription>A name for your project</FieldDescription>
             </Field>
 
             <Field>
