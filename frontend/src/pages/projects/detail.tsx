@@ -48,7 +48,6 @@ import {
   MoreHorizontalIcon,
   PauseIcon,
   PlayIcon,
-  Settings01Icon,
   SquareLock02Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -439,16 +438,10 @@ export function ProjectDetailPage() {
               `Created ${format(new Date(project.created_at), "MMM d, yyyy 'at' h:mm a")}`}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm">
-            <HugeiconsIcon icon={Settings01Icon} className="size-4" strokeWidth={2} />
-            Settings
-          </Button>
-          <Button size="sm" onClick={() => setIsCreateOpen(true)}>
-            <HugeiconsIcon icon={Add01Icon} className="size-4" strokeWidth={2} />
-            New Database
-          </Button>
-        </div>
+        <Button size="sm" onClick={() => setIsCreateOpen(true)}>
+          <HugeiconsIcon icon={Add01Icon} className="size-4" strokeWidth={2} />
+          New Database
+        </Button>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">
