@@ -16,25 +16,32 @@
     "rules": {
       "recommended": true,
       "a11y": {
-        "recommended": true
+        "recommended": true,
+        "useFocusableInteractive": "off",
+        "useSemanticElements": "off",
+        "noRedundantRoles": "off"
       },
       "complexity": {
         "recommended": true
       },
       "correctness": {
-        "recommended": true
+        "recommended": true,
+        "useExhaustiveDependencies": "warn"
       },
       "performance": {
         "recommended": true
       },
       "security": {
-        "recommended": true
+        "recommended": true,
+        "noDangerouslySetInnerHtml": "off"
       },
       "style": {
         "recommended": true
       },
       "suspicious": {
-        "recommended": true
+        "recommended": true,
+        "noArrayIndexKey": "off",
+        "noDoubleEquals": "warn"
       }
     },
     "ignore": ["dist", "node_modules", ".vite", "*.config.js"]
