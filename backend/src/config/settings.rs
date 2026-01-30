@@ -85,6 +85,8 @@ pub struct DockerSettings {
     pub pgbouncer_image: String,
     #[serde(default = "default_valkey_image")]
     pub valkey_image: String,
+    #[serde(default = "default_redis_image")]
+    pub redis_image: String,
     #[serde(default = "default_data_dir")]
     pub data_dir: String,
     #[serde(default = "default_public_host")]
@@ -219,6 +221,9 @@ fn default_pgbouncer_image() -> String {
 fn default_valkey_image() -> String {
     "valkey/valkey:8.0-alpine".to_string()
 }
+fn default_redis_image() -> String {
+    "redis:8.0-alpine".to_string()
+}
 fn default_data_dir() -> String {
     "/var/lib/datify/data".to_string()
 }
@@ -278,6 +283,7 @@ impl Default for DockerSettings {
             postgres_image: default_postgres_image(),
             pgbouncer_image: default_pgbouncer_image(),
             valkey_image: default_valkey_image(),
+            redis_image: default_redis_image(),
             data_dir: default_data_dir(),
             public_host: default_public_host(),
         }
@@ -382,6 +388,7 @@ impl Settings {
                     .unwrap_or_else(|_| default_pgbouncer_image()),
                 valkey_image: std::env::var("VALKEY_IMAGE")
                     .unwrap_or_else(|_| default_valkey_image()),
+                redis_image: std::env::var("REDIS_IMAGE").unwrap_or_else(|_| default_redis_image()),
                 data_dir: std::env::var("DOCKER_DATA_DIR").unwrap_or_else(|_| default_data_dir()),
                 public_host: std::env::var("DOCKER_PUBLIC_HOST")
                     .unwrap_or_else(|_| default_public_host()),

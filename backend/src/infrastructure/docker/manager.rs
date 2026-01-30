@@ -16,6 +16,7 @@ use bollard::Docker;
 use bytes::Bytes;
 use futures::{Stream, StreamExt, TryStreamExt};
 
+use super::containers::{ContainerConfig, PostgresContainer, RedisContainer, ValkeyContainer};
 use crate::config::Settings;
 use crate::error::{AppError, AppResult};
 
@@ -66,19 +67,6 @@ pub struct ContainerLogs {
 pub struct DockerManager {
     docker: Arc<Docker>,
     settings: Arc<Settings>,
-}
-
-#[derive(Debug, Clone)]
-pub struct ContainerConfig {
-    pub name: String,
-    pub image: String,
-    pub env: Vec<String>,
-    pub data_path: String,
-    pub cpu_limit: f64,
-    pub memory_limit_mb: i64,
-    pub internal_port: u16,
-    pub exposed_port: Option<u16>,
-    pub cmd: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone)]
@@ -138,20 +126,6 @@ impl DockerManager {
         Ok(())
     }
 
-    /// Check if the postgres image is version 18 or later
-    /// PostgreSQL 18+ uses a different data directory structure
-    fn is_postgres_18_or_later(image: &str) -> bool {
-        // Parse version from image tag like "postgres:18" or "postgres:18-alpine"
-        if let Some(tag) = image.split(':').nth(1) {
-            // Extract the major version number
-            let version_str = tag.split('-').next().unwrap_or(tag);
-            if let Ok(version) = version_str.parse::<u32>() {
-                return version >= 18;
-            }
-        }
-        false
-    }
-
     pub async fn pull_image(&self, image: &str) -> AppResult<()> {
         tracing::info!("Pulling Docker image: {}", image);
 
@@ -174,68 +148,13 @@ impl DockerManager {
         password: &str,
     ) -> AppResult<String> {
         self.pull_image(&config.image).await?;
-
-        let mut env = config.env.clone();
-        env.push(format!("POSTGRES_PASSWORD={}", password));
-        env.push("POSTGRES_HOST_AUTH_METHOD=scram-sha-256".to_string());
-
-        let mut port_bindings = HashMap::new();
-        if let Some(exposed_port) = config.exposed_port {
-            port_bindings.insert(
-                format!("{}/tcp", config.internal_port),
-                Some(vec![PortBinding {
-                    host_ip: Some("0.0.0.0".to_string()),
-                    host_port: Some(exposed_port.to_string()),
-                }]),
-            );
-        }
-
-        // PostgreSQL 18+ changed data directory structure
-        // See: https://github.com/docker-library/postgres/pull/1259
-        let mount_point = if Self::is_postgres_18_or_later(&config.image) {
-            "/var/lib/postgresql"
-        } else {
-            "/var/lib/postgresql/data"
-        };
-
-        let host_config = HostConfig {
-            binds: Some(vec![format!("{}:{}", config.data_path, mount_point)]),
-            port_bindings: Some(port_bindings),
-            network_mode: Some(self.settings.docker.network_name.clone()),
-            memory: Some(config.memory_limit_mb * 1024 * 1024),
-            nano_cpus: Some((config.cpu_limit * 1_000_000_000.0) as i64),
-            restart_policy: Some(RestartPolicy {
-                name: Some(RestartPolicyNameEnum::UNLESS_STOPPED),
-                maximum_retry_count: None,
-            }),
-            ..Default::default()
-        };
-
-        let exposed_ports = vec![format!("{}/tcp", config.internal_port)];
-
-        let container_body = ContainerCreateBody {
-            image: Some(config.image.clone()),
-            hostname: Some(config.name.clone()),
-            env: Some(env),
-            host_config: Some(host_config),
-            exposed_ports: Some(exposed_ports),
-            cmd: config.cmd.clone(),
-            ..Default::default()
-        };
-
-        let options = CreateContainerOptionsBuilder::default()
-            .name(&config.name)
-            .build();
-
-        let container = self
-            .docker
-            .create_container(Some(options), container_body)
-            .await
-            .map_err(|e| AppError::Docker(format!("Failed to create container: {}", e)))?;
-
-        tracing::info!("Created container {} with ID {}", config.name, container.id);
-
-        Ok(container.id)
+        PostgresContainer::create(
+            &self.docker,
+            config,
+            password,
+            &self.settings.docker.network_name,
+        )
+        .await
     }
 
     pub async fn create_valkey_container(
@@ -244,72 +163,40 @@ impl DockerManager {
         password: &str,
     ) -> AppResult<String> {
         self.pull_image(&config.image).await?;
+        ValkeyContainer::create(
+            &self.docker,
+            config,
+            password,
+            &self.settings.docker.network_name,
+        )
+        .await
+    }
 
-        let mut port_bindings = HashMap::new();
-        if let Some(exposed_port) = config.exposed_port {
-            port_bindings.insert(
-                format!("{}/tcp", config.internal_port),
-                Some(vec![PortBinding {
-                    host_ip: Some("0.0.0.0".to_string()),
-                    host_port: Some(exposed_port.to_string()),
-                }]),
-            );
-        }
+    pub async fn create_redis_container(
+        &self,
+        config: ContainerConfig,
+        password: &str,
+    ) -> AppResult<String> {
+        self.pull_image(&config.image).await?;
+        RedisContainer::create(
+            &self.docker,
+            config,
+            password,
+            &self.settings.docker.network_name,
+        )
+        .await
+    }
 
-        let host_config = HostConfig {
-            binds: Some(vec![format!("{}:/data", config.data_path)]),
-            port_bindings: Some(port_bindings),
-            network_mode: Some(self.settings.docker.network_name.clone()),
-            memory: Some(config.memory_limit_mb * 1024 * 1024),
-            nano_cpus: Some((config.cpu_limit * 1_000_000_000.0) as i64),
-            restart_policy: Some(RestartPolicy {
-                name: Some(RestartPolicyNameEnum::UNLESS_STOPPED),
-                maximum_retry_count: None,
-            }),
-            ..Default::default()
-        };
-
-        let exposed_ports = vec![format!("{}/tcp", config.internal_port)];
-
-        let cmd = vec![
-            "valkey-server".to_string(),
-            "--requirepass".to_string(),
-            password.to_string(),
-            "--appendonly".to_string(),
-            "yes".to_string(),
-        ];
-
-        let container_body = ContainerCreateBody {
-            image: Some(config.image.clone()),
-            hostname: Some(config.name.clone()),
-            env: Some(config.env.clone()),
-            host_config: Some(host_config),
-            exposed_ports: Some(exposed_ports),
-            cmd: Some(cmd),
-            ..Default::default()
-        };
-
-        let options = CreateContainerOptionsBuilder::default()
-            .name(&config.name)
-            .build();
-
-        let container = self
-            .docker
-            .create_container(Some(options), container_body)
-            .await
-            .map_err(|e| AppError::Docker(format!("Failed to create Valkey container: {}", e)))?;
-
-        tracing::info!(
-            "Created Valkey container {} with ID {}",
-            config.name,
-            container.id
-        );
-
-        Ok(container.id)
+    pub fn postgres_image(&self) -> &str {
+        &self.settings.docker.postgres_image
     }
 
     pub fn valkey_image(&self) -> &str {
         &self.settings.docker.valkey_image
+    }
+
+    pub fn redis_image(&self) -> &str {
+        &self.settings.docker.redis_image
     }
 
     pub async fn create_pgbouncer_container(
@@ -528,10 +415,6 @@ impl DockerManager {
         }
 
         Ok(false)
-    }
-
-    pub fn postgres_image(&self) -> &str {
-        &self.settings.docker.postgres_image
     }
 
     pub fn pull_image_with_progress(

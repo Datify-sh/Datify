@@ -7,7 +7,7 @@ use aes_gcm::{
 use rand::RngCore;
 
 use crate::domain::models::{
-    BranchResponse, Database, DatabaseResponse, PostgresVersion, ValkeyVersion,
+    BranchResponse, Database, DatabaseResponse, PostgresVersion, RedisVersion, ValkeyVersion,
 };
 use crate::error::{AppError, AppResult};
 use crate::infrastructure::docker::{ContainerConfig, DockerManager};
@@ -95,6 +95,7 @@ impl DatabaseService {
         database_type: &str,
         postgres_version: &str,
         valkey_version: Option<&str>,
+        redis_version: Option<&str>,
         password: Option<&str>,
         cpu_limit: f64,
         memory_limit_mb: i32,
@@ -127,11 +128,17 @@ impl DatabaseService {
         }
 
         let is_valkey = database_type == "valkey";
+        let is_redis = database_type == "redis";
 
         if is_valkey {
             let version = valkey_version.unwrap_or("8.0");
             if !ValkeyVersion::is_valid(version) {
                 return Err(AppError::Validation("Invalid Valkey version".to_string()));
+            }
+        } else if is_redis {
+            let version = redis_version.unwrap_or("7.4");
+            if !RedisVersion::is_valid(version) {
+                return Err(AppError::Validation("Invalid Redis version".to_string()));
             }
         } else if !PostgresVersion::is_valid(postgres_version) {
             return Err(AppError::Validation(
@@ -159,6 +166,7 @@ impl DatabaseService {
                 database_type,
                 postgres_version,
                 valkey_version,
+                redis_version,
                 cpu_limit,
                 memory_limit_mb,
                 storage_limit_mb,
@@ -194,6 +202,22 @@ impl DatabaseService {
             };
             self.docker
                 .create_valkey_container(config, &password)
+                .await?
+        } else if is_redis {
+            let version = redis_version.unwrap_or("7.4");
+            let config = ContainerConfig {
+                name: database.container_name(),
+                image: format!("redis:{}-alpine", version),
+                env: vec![],
+                data_path,
+                cpu_limit,
+                memory_limit_mb: memory_limit_mb as i64,
+                internal_port: 6379,
+                exposed_port: Some(port as u16),
+                cmd: None,
+            };
+            self.docker
+                .create_redis_container(config, &password)
                 .await?
         } else {
             let config = ContainerConfig {
@@ -583,9 +607,9 @@ impl DatabaseService {
             .await?
             .ok_or_else(|| AppError::NotFound(format!("Database '{}' not found", database_id)))?;
 
-        if source.database_type == "valkey" {
+        if source.database_type == "valkey" || source.database_type == "redis" {
             return Err(AppError::Validation(
-                "Branching is not supported for Valkey databases".to_string(),
+                "Branching is not supported for key-value databases".to_string(),
             ));
         }
 
@@ -649,6 +673,7 @@ impl DatabaseService {
                 &source.database_type,
                 &source.postgres_version,
                 source.valkey_version.as_deref(),
+                source.redis_version.as_deref(),
                 source.cpu_limit,
                 source.memory_limit_mb,
                 source.storage_limit_mb,

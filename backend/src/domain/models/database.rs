@@ -8,6 +8,7 @@ pub enum DatabaseType {
     #[default]
     Postgres,
     Valkey,
+    Redis,
 }
 
 impl DatabaseType {
@@ -15,6 +16,7 @@ impl DatabaseType {
         match self {
             Self::Postgres => "postgres",
             Self::Valkey => "valkey",
+            Self::Redis => "redis",
         }
     }
 }
@@ -26,6 +28,7 @@ impl std::str::FromStr for DatabaseType {
         match s.to_lowercase().as_str() {
             "postgres" => Ok(Self::Postgres),
             "valkey" => Ok(Self::Valkey),
+            "redis" => Ok(Self::Redis),
             _ => Err(format!("Unknown database type: {}", s)),
         }
     }
@@ -40,6 +43,18 @@ impl std::fmt::Display for DatabaseType {
 pub struct ValkeyVersion;
 
 impl ValkeyVersion {
+    pub fn is_valid(version: &str) -> bool {
+        let parts: Vec<&str> = version.split('.').collect();
+        if parts.len() < 2 {
+            return false;
+        }
+        parts[0].parse::<u32>().is_ok() && parts[1].parse::<u32>().is_ok()
+    }
+}
+
+pub struct RedisVersion;
+
+impl RedisVersion {
     pub fn is_valid(version: &str) -> bool {
         let parts: Vec<&str> = version.split('.').collect();
         if parts.len() < 2 {
@@ -65,6 +80,7 @@ pub struct Database {
     pub database_type: String,
     pub postgres_version: String,
     pub valkey_version: Option<String>,
+    pub redis_version: Option<String>,
     pub container_id: Option<String>,
     pub container_status: String,
     pub host: Option<String>,
@@ -94,6 +110,8 @@ pub struct CreateDatabaseRequest {
     pub postgres_version: String,
     #[schema(example = "8.0")]
     pub valkey_version: Option<String>,
+    #[schema(example = "7.4")]
+    pub redis_version: Option<String>,
     pub password: Option<String>,
     #[serde(default = "default_cpu_limit")]
     pub cpu_limit: f64,
@@ -146,6 +164,7 @@ pub struct DatabaseResponse {
     pub database_type: String,
     pub postgres_version: String,
     pub valkey_version: Option<String>,
+    pub redis_version: Option<String>,
     pub status: String,
     pub connection: Option<ConnectionInfo>,
     pub resources: ResourceLimits,
@@ -205,10 +224,10 @@ pub struct ResourceLimits {
 
 impl Database {
     pub fn container_name(&self) -> String {
-        let prefix = if self.database_type == "valkey" {
-            "datify-valkey"
-        } else {
-            "datify-pg"
+        let prefix = match self.database_type.as_str() {
+            "valkey" => "datify-valkey",
+            "redis" => "datify-redis",
+            _ => "datify-pg",
         };
         let sanitized = self
             .name
@@ -226,11 +245,11 @@ impl Database {
         password: Option<&str>,
         public_host: Option<&str>,
     ) -> DatabaseResponse {
-        let is_valkey = self.database_type == "valkey";
+        let is_key_value = self.database_type == "valkey" || self.database_type == "redis";
         let connection = if self.container_status == "running" {
             self.port.map(|port| {
                 let pwd = password.unwrap_or("********");
-                let internal_port = if is_valkey { 6379 } else { 5432 };
+                let internal_port = if is_key_value { 6379 } else { 5432 };
                 let container_name = self.container_name();
                 let host = if self.public_exposed {
                     public_host
@@ -245,7 +264,7 @@ impl Database {
                     internal_port
                 };
 
-                let (database, connection_string) = if is_valkey {
+                let (database, connection_string) = if is_key_value {
                     (
                         "0".to_string(),
                         format!("redis://:{}@{}:{}/0", pwd, host, display_port),
@@ -280,6 +299,7 @@ impl Database {
             database_type: self.database_type.clone(),
             postgres_version: self.postgres_version.clone(),
             valkey_version: self.valkey_version.clone(),
+            redis_version: self.redis_version.clone(),
             status: self.container_status.clone(),
             connection,
             resources: ResourceLimits {
