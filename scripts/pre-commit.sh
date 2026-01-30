@@ -34,6 +34,14 @@ print_status "Formatting frontend..."
 (cd frontend && bun run lint)
 print_success "Frontend formatted"
 
+print_status "Checking frontend types..."
+if (cd frontend && bun run tsc -b); then
+    print_success "Frontend types passed"
+else
+    print_error "Frontend types failed"
+    FAILED=1
+fi
+
 print_status "Checking frontend lint..."
 if (cd frontend && bun run lint:check); then
     print_success "Frontend lint passed"
