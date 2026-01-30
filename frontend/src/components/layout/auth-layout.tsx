@@ -1,6 +1,6 @@
-import { Outlet, Navigate } from "react-router-dom";
-import { useAuth } from "@/contexts/auth-context";
 import { Spinner } from "@/components/ui/spinner";
+import { useAuth } from "@/contexts/auth-context";
+import { Navigate, Outlet } from "react-router-dom";
 
 export function AuthLayout() {
   const { isAuthenticated, isLoading } = useAuth();

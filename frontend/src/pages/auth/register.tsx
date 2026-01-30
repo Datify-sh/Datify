@@ -1,10 +1,10 @@
+import { Button } from "@/components/ui/button";
+import { Field, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
+import { useAuth } from "@/contexts/auth-context";
 import * as React from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useAuth } from "@/contexts/auth-context";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Field, FieldLabel } from "@/components/ui/field";
-import { Spinner } from "@/components/ui/spinner";
 
 export function RegisterPage() {
   const navigate = useNavigate();

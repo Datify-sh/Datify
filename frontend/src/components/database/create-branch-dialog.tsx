@@ -1,30 +1,30 @@
-import * as React from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
-import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
-import {
-  GitBranchIcon,
-  Database01Icon,
-  File01Icon,
-  InformationCircleIcon,
-} from "@hugeicons/core-free-icons";
-import { databasesApi } from "@/lib/api";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogClose,
   DialogContent,
-  DialogHeader,
-  DialogTitle,
   DialogDescription,
   DialogFooter,
-  DialogClose,
+  DialogHeader,
+  DialogTitle,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
+import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Field, FieldLabel, FieldDescription } from "@/components/ui/field";
-import { Spinner } from "@/components/ui/spinner";
 import { Progress } from "@/components/ui/progress";
-import { toast } from "sonner";
+import { Spinner } from "@/components/ui/spinner";
+import { databasesApi } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import {
+  Database01Icon,
+  File01Icon,
+  GitBranchIcon,
+  InformationCircleIcon,
+} from "@hugeicons/core-free-icons";
+import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import * as React from "react";
+import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 
 interface CreateBranchDialogProps {
   open: boolean;

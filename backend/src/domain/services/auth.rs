@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use argon2::{
     password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
     Argon2,
@@ -8,7 +10,6 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
 use validator::ValidateEmail;
-use std::sync::Arc;
 
 use crate::config::Settings;
 use crate::domain::models::{User, UserResponse};

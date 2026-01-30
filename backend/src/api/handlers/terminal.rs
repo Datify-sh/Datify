@@ -154,77 +154,83 @@ async fn handle_terminal(socket: WebSocket, state: TerminalState, container_id: 
             let docker_for_resize = state.docker.clone();
 
             let (output_abort, output_reg) = AbortHandle::new_pair();
-            let mut output_task = tokio::spawn(Abortable::new(async move {
-                while let Some(result) = output.next().await {
-                    match result {
-                        Ok(output) => {
-                            let data = match output {
-                                bollard::container::LogOutput::StdOut { message } => message,
-                                bollard::container::LogOutput::StdErr { message } => message,
-                                bollard::container::LogOutput::Console { message } => message,
-                                _ => continue,
-                            };
+            let mut output_task = tokio::spawn(Abortable::new(
+                async move {
+                    while let Some(result) = output.next().await {
+                        match result {
+                            Ok(output) => {
+                                let data = match output {
+                                    bollard::container::LogOutput::StdOut { message } => message,
+                                    bollard::container::LogOutput::StdErr { message } => message,
+                                    bollard::container::LogOutput::Console { message } => message,
+                                    _ => continue,
+                                };
 
-                            let text = String::from_utf8_lossy(&data).to_string();
-                            let msg = TerminalOutputMessage::Output { data: text };
-                            let json = serde_json::to_string(&msg).unwrap();
+                                let text = String::from_utf8_lossy(&data).to_string();
+                                let msg = TerminalOutputMessage::Output { data: text };
+                                let json = serde_json::to_string(&msg).unwrap();
 
-                            if ws_sender.send(Message::Text(json.into())).await.is_err() {
+                                if ws_sender.send(Message::Text(json.into())).await.is_err() {
+                                    break;
+                                }
+                            },
+                            Err(e) => {
+                                let msg = TerminalOutputMessage::Error {
+                                    message: format!("Stream error: {}", e),
+                                };
+                                let json = serde_json::to_string(&msg).unwrap();
+                                let _ = ws_sender.send(Message::Text(json.into())).await;
                                 break;
-                            }
-                        },
-                        Err(e) => {
-                            let msg = TerminalOutputMessage::Error {
-                                message: format!("Stream error: {}", e),
-                            };
-                            let json = serde_json::to_string(&msg).unwrap();
-                            let _ = ws_sender.send(Message::Text(json.into())).await;
-                            break;
-                        },
+                            },
+                        }
                     }
-                }
-            }, output_reg));
+                },
+                output_reg,
+            ));
 
             let (input_abort, input_reg) = AbortHandle::new_pair();
-            let mut input_task = tokio::spawn(Abortable::new(async move {
-                while let Some(msg) = ws_receiver.next().await {
-                    match msg {
-                        Ok(Message::Text(text)) => {
-                            if let Ok(terminal_msg) =
-                                serde_json::from_str::<TerminalInputMessage>(&text)
-                            {
-                                match terminal_msg {
-                                    TerminalInputMessage::Input { data } => {
-                                        if input.write_all(data.as_bytes()).await.is_err() {
-                                            break;
-                                        }
-                                        if input.flush().await.is_err() {
-                                            break;
-                                        }
-                                    },
-                                    TerminalInputMessage::Resize { cols, rows } => {
-                                        let _ = docker_for_resize
-                                            .resize_exec(&exec_id_for_resize, cols, rows)
-                                            .await;
-                                    },
-                                    TerminalInputMessage::Ping => {},
+            let mut input_task = tokio::spawn(Abortable::new(
+                async move {
+                    while let Some(msg) = ws_receiver.next().await {
+                        match msg {
+                            Ok(Message::Text(text)) => {
+                                if let Ok(terminal_msg) =
+                                    serde_json::from_str::<TerminalInputMessage>(&text)
+                                {
+                                    match terminal_msg {
+                                        TerminalInputMessage::Input { data } => {
+                                            if input.write_all(data.as_bytes()).await.is_err() {
+                                                break;
+                                            }
+                                            if input.flush().await.is_err() {
+                                                break;
+                                            }
+                                        },
+                                        TerminalInputMessage::Resize { cols, rows } => {
+                                            let _ = docker_for_resize
+                                                .resize_exec(&exec_id_for_resize, cols, rows)
+                                                .await;
+                                        },
+                                        TerminalInputMessage::Ping => {},
+                                    }
                                 }
-                            }
-                        },
-                        Ok(Message::Binary(data)) => {
-                            if input.write_all(&data).await.is_err() {
-                                break;
-                            }
-                            if input.flush().await.is_err() {
-                                break;
-                            }
-                        },
-                        Ok(Message::Close(_)) => break,
-                        Err(_) => break,
-                        _ => {},
+                            },
+                            Ok(Message::Binary(data)) => {
+                                if input.write_all(&data).await.is_err() {
+                                    break;
+                                }
+                                if input.flush().await.is_err() {
+                                    break;
+                                }
+                            },
+                            Ok(Message::Close(_)) => break,
+                            Err(_) => break,
+                            _ => {},
+                        }
                     }
-                }
-            }, input_reg));
+                },
+                input_reg,
+            ));
 
             tokio::select! {
                 _ = &mut output_task => {
@@ -379,7 +385,9 @@ pub async fn database_valkey_cli(
         "Valkey CLI session started"
     );
 
-    Ok(ws.on_upgrade(move |socket| handle_valkey_cli_terminal(socket, state, container_id, password)))
+    Ok(ws.on_upgrade(move |socket| {
+        handle_valkey_cli_terminal(socket, state, container_id, password)
+    }))
 }
 
 async fn handle_valkey_cli_terminal(
@@ -447,77 +455,83 @@ async fn handle_valkey_cli_terminal(
             let docker_for_resize = state.docker.clone();
 
             let (output_abort, output_reg) = AbortHandle::new_pair();
-            let mut output_task = tokio::spawn(Abortable::new(async move {
-                while let Some(result) = output.next().await {
-                    match result {
-                        Ok(output) => {
-                            let data = match output {
-                                bollard::container::LogOutput::StdOut { message } => message,
-                                bollard::container::LogOutput::StdErr { message } => message,
-                                bollard::container::LogOutput::Console { message } => message,
-                                _ => continue,
-                            };
+            let mut output_task = tokio::spawn(Abortable::new(
+                async move {
+                    while let Some(result) = output.next().await {
+                        match result {
+                            Ok(output) => {
+                                let data = match output {
+                                    bollard::container::LogOutput::StdOut { message } => message,
+                                    bollard::container::LogOutput::StdErr { message } => message,
+                                    bollard::container::LogOutput::Console { message } => message,
+                                    _ => continue,
+                                };
 
-                            let text = String::from_utf8_lossy(&data).to_string();
-                            let msg = TerminalOutputMessage::Output { data: text };
-                            let json = serde_json::to_string(&msg).unwrap();
+                                let text = String::from_utf8_lossy(&data).to_string();
+                                let msg = TerminalOutputMessage::Output { data: text };
+                                let json = serde_json::to_string(&msg).unwrap();
 
-                            if ws_sender.send(Message::Text(json.into())).await.is_err() {
+                                if ws_sender.send(Message::Text(json.into())).await.is_err() {
+                                    break;
+                                }
+                            },
+                            Err(e) => {
+                                let msg = TerminalOutputMessage::Error {
+                                    message: format!("Stream error: {}", e),
+                                };
+                                let json = serde_json::to_string(&msg).unwrap();
+                                let _ = ws_sender.send(Message::Text(json.into())).await;
                                 break;
-                            }
-                        },
-                        Err(e) => {
-                            let msg = TerminalOutputMessage::Error {
-                                message: format!("Stream error: {}", e),
-                            };
-                            let json = serde_json::to_string(&msg).unwrap();
-                            let _ = ws_sender.send(Message::Text(json.into())).await;
-                            break;
-                        },
+                            },
+                        }
                     }
-                }
-            }, output_reg));
+                },
+                output_reg,
+            ));
 
             let (input_abort, input_reg) = AbortHandle::new_pair();
-            let mut input_task = tokio::spawn(Abortable::new(async move {
-                while let Some(msg) = ws_receiver.next().await {
-                    match msg {
-                        Ok(Message::Text(text)) => {
-                            if let Ok(terminal_msg) =
-                                serde_json::from_str::<TerminalInputMessage>(&text)
-                            {
-                                match terminal_msg {
-                                    TerminalInputMessage::Input { data } => {
-                                        if input.write_all(data.as_bytes()).await.is_err() {
-                                            break;
-                                        }
-                                        if input.flush().await.is_err() {
-                                            break;
-                                        }
-                                    },
-                                    TerminalInputMessage::Resize { cols, rows } => {
-                                        let _ = docker_for_resize
-                                            .resize_exec(&exec_id_for_resize, cols, rows)
-                                            .await;
-                                    },
-                                    TerminalInputMessage::Ping => {},
+            let mut input_task = tokio::spawn(Abortable::new(
+                async move {
+                    while let Some(msg) = ws_receiver.next().await {
+                        match msg {
+                            Ok(Message::Text(text)) => {
+                                if let Ok(terminal_msg) =
+                                    serde_json::from_str::<TerminalInputMessage>(&text)
+                                {
+                                    match terminal_msg {
+                                        TerminalInputMessage::Input { data } => {
+                                            if input.write_all(data.as_bytes()).await.is_err() {
+                                                break;
+                                            }
+                                            if input.flush().await.is_err() {
+                                                break;
+                                            }
+                                        },
+                                        TerminalInputMessage::Resize { cols, rows } => {
+                                            let _ = docker_for_resize
+                                                .resize_exec(&exec_id_for_resize, cols, rows)
+                                                .await;
+                                        },
+                                        TerminalInputMessage::Ping => {},
+                                    }
                                 }
-                            }
-                        },
-                        Ok(Message::Binary(data)) => {
-                            if input.write_all(&data).await.is_err() {
-                                break;
-                            }
-                            if input.flush().await.is_err() {
-                                break;
-                            }
-                        },
-                        Ok(Message::Close(_)) => break,
-                        Err(_) => break,
-                        _ => {},
+                            },
+                            Ok(Message::Binary(data)) => {
+                                if input.write_all(&data).await.is_err() {
+                                    break;
+                                }
+                                if input.flush().await.is_err() {
+                                    break;
+                                }
+                            },
+                            Ok(Message::Close(_)) => break,
+                            Err(_) => break,
+                            _ => {},
+                        }
                     }
-                }
-            }, input_reg));
+                },
+                input_reg,
+            ));
 
             tokio::select! {
                 _ = &mut output_task => {
@@ -606,77 +620,83 @@ async fn handle_psql_terminal(
             let docker_for_resize = state.docker.clone();
 
             let (output_abort, output_reg) = AbortHandle::new_pair();
-            let mut output_task = tokio::spawn(Abortable::new(async move {
-                while let Some(result) = output.next().await {
-                    match result {
-                        Ok(output) => {
-                            let data = match output {
-                                bollard::container::LogOutput::StdOut { message } => message,
-                                bollard::container::LogOutput::StdErr { message } => message,
-                                bollard::container::LogOutput::Console { message } => message,
-                                _ => continue,
-                            };
+            let mut output_task = tokio::spawn(Abortable::new(
+                async move {
+                    while let Some(result) = output.next().await {
+                        match result {
+                            Ok(output) => {
+                                let data = match output {
+                                    bollard::container::LogOutput::StdOut { message } => message,
+                                    bollard::container::LogOutput::StdErr { message } => message,
+                                    bollard::container::LogOutput::Console { message } => message,
+                                    _ => continue,
+                                };
 
-                            let text = String::from_utf8_lossy(&data).to_string();
-                            let msg = TerminalOutputMessage::Output { data: text };
-                            let json = serde_json::to_string(&msg).unwrap();
+                                let text = String::from_utf8_lossy(&data).to_string();
+                                let msg = TerminalOutputMessage::Output { data: text };
+                                let json = serde_json::to_string(&msg).unwrap();
 
-                            if ws_sender.send(Message::Text(json.into())).await.is_err() {
+                                if ws_sender.send(Message::Text(json.into())).await.is_err() {
+                                    break;
+                                }
+                            },
+                            Err(e) => {
+                                let msg = TerminalOutputMessage::Error {
+                                    message: format!("Stream error: {}", e),
+                                };
+                                let json = serde_json::to_string(&msg).unwrap();
+                                let _ = ws_sender.send(Message::Text(json.into())).await;
                                 break;
-                            }
-                        },
-                        Err(e) => {
-                            let msg = TerminalOutputMessage::Error {
-                                message: format!("Stream error: {}", e),
-                            };
-                            let json = serde_json::to_string(&msg).unwrap();
-                            let _ = ws_sender.send(Message::Text(json.into())).await;
-                            break;
-                        },
+                            },
+                        }
                     }
-                }
-            }, output_reg));
+                },
+                output_reg,
+            ));
 
             let (input_abort, input_reg) = AbortHandle::new_pair();
-            let mut input_task = tokio::spawn(Abortable::new(async move {
-                while let Some(msg) = ws_receiver.next().await {
-                    match msg {
-                        Ok(Message::Text(text)) => {
-                            if let Ok(terminal_msg) =
-                                serde_json::from_str::<TerminalInputMessage>(&text)
-                            {
-                                match terminal_msg {
-                                    TerminalInputMessage::Input { data } => {
-                                        if input.write_all(data.as_bytes()).await.is_err() {
-                                            break;
-                                        }
-                                        if input.flush().await.is_err() {
-                                            break;
-                                        }
-                                    },
-                                    TerminalInputMessage::Resize { cols, rows } => {
-                                        let _ = docker_for_resize
-                                            .resize_exec(&exec_id_for_resize, cols, rows)
-                                            .await;
-                                    },
-                                    TerminalInputMessage::Ping => {},
+            let mut input_task = tokio::spawn(Abortable::new(
+                async move {
+                    while let Some(msg) = ws_receiver.next().await {
+                        match msg {
+                            Ok(Message::Text(text)) => {
+                                if let Ok(terminal_msg) =
+                                    serde_json::from_str::<TerminalInputMessage>(&text)
+                                {
+                                    match terminal_msg {
+                                        TerminalInputMessage::Input { data } => {
+                                            if input.write_all(data.as_bytes()).await.is_err() {
+                                                break;
+                                            }
+                                            if input.flush().await.is_err() {
+                                                break;
+                                            }
+                                        },
+                                        TerminalInputMessage::Resize { cols, rows } => {
+                                            let _ = docker_for_resize
+                                                .resize_exec(&exec_id_for_resize, cols, rows)
+                                                .await;
+                                        },
+                                        TerminalInputMessage::Ping => {},
+                                    }
                                 }
-                            }
-                        },
-                        Ok(Message::Binary(data)) => {
-                            if input.write_all(&data).await.is_err() {
-                                break;
-                            }
-                            if input.flush().await.is_err() {
-                                break;
-                            }
-                        },
-                        Ok(Message::Close(_)) => break,
-                        Err(_) => break,
-                        _ => {},
+                            },
+                            Ok(Message::Binary(data)) => {
+                                if input.write_all(&data).await.is_err() {
+                                    break;
+                                }
+                                if input.flush().await.is_err() {
+                                    break;
+                                }
+                            },
+                            Ok(Message::Close(_)) => break,
+                            Err(_) => break,
+                            _ => {},
+                        }
                     }
-                }
-            }, input_reg));
+                },
+                input_reg,
+            ));
 
             tokio::select! {
                 _ = &mut output_task => {

@@ -1,7 +1,7 @@
-import * as React from "react";
+import { apiClient, authApi } from "@/lib/api";
+import type { LoginRequest, RegisterRequest, UserResponse } from "@/lib/api";
 import { useQueryClient } from "@tanstack/react-query";
-import { authApi, apiClient } from "@/lib/api";
-import type { UserResponse, LoginRequest, RegisterRequest } from "@/lib/api";
+import * as React from "react";
 
 interface AuthContextValue {
   user: UserResponse | null;

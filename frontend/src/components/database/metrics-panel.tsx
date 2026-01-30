@@ -1,27 +1,27 @@
-import * as React from "react";
-import { useQuery } from "@tanstack/react-query";
-import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import {
+  ArrowDownIcon,
+  ArrowUpIcon,
+  BarChartIcon,
+  ClockIcon,
   DatabaseIcon,
   HardDriveIcon,
-  ClockIcon,
-  TableIcon,
   LinkIcon,
-  BarChartIcon,
-  ArrowUpIcon,
-  ArrowDownIcon,
+  TableIcon,
 } from "@hugeicons/core-free-icons";
-import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid } from "recharts";
+import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
+import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
+import * as React from "react";
+import { Area, AreaChart, CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
 
-import { databasesApi } from "@/lib/api";
-import type { TimeRange, DatabaseMetrics, MetricsHistoryPoint } from "@/lib/api/types";
-import { useMetricsStream } from "@/hooks/use-metrics-stream";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useMetricsStream } from "@/hooks/use-metrics-stream";
+import { databasesApi } from "@/lib/api";
+import type { DatabaseMetrics, MetricsHistoryPoint, TimeRange } from "@/lib/api/types";
 
 interface MetricsPanelProps {
   databaseId: string;
