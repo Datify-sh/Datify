@@ -1,10 +1,10 @@
-import * as React from "react";
-import { useQuery } from "@tanstack/react-query";
+import { Database01Icon, Folder01Icon, GitBranchIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Folder01Icon, Database01Icon, GitBranchIcon } from "@hugeicons/core-free-icons";
+import { useQuery } from "@tanstack/react-query";
+import * as React from "react";
 
-import { projectsApi, databasesApi } from "@/lib/api";
-import type { DatabaseResponse } from "@/lib/api/types";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Command,
   CommandEmpty,
@@ -15,9 +15,9 @@ import {
   CommandSeparator,
 } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { databasesApi, projectsApi } from "@/lib/api";
+import type { DatabaseResponse } from "@/lib/api/types";
 import { cn } from "@/lib/utils";
 
 interface DatabaseSelectorProps {

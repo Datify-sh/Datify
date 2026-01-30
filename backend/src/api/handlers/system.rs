@@ -1,7 +1,8 @@
+use std::time::{Duration, Instant};
+
 use axum::Json;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
-use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 use utoipa::ToSchema;
 
@@ -86,7 +87,7 @@ async fn fetch_postgres_versions() -> Result<Vec<PostgresVersionInfo>, reqwest::
     let mut major_versions: Vec<u32> = all_tags
         .iter()
         .filter_map(|tag| tag.parse::<u32>().ok())
-        .filter(|&v| v >= 13 && v <= 25)
+        .filter(|&v| (13..=25).contains(&v))
         .collect();
 
     major_versions.sort();
@@ -174,11 +175,11 @@ pub async fn get_postgres_versions() -> Json<PostgresVersionsResponse> {
                 fetched_at: Instant::now(),
             });
             v
-        }
+        },
         Err(e) => {
             tracing::warn!("Failed to fetch PostgreSQL versions from Docker Hub: {}", e);
             vec![]
-        }
+        },
     };
 
     Json(PostgresVersionsResponse {
@@ -216,11 +217,11 @@ pub async fn get_valkey_versions() -> Json<ValkeyVersionsResponse> {
                 fetched_at: Instant::now(),
             });
             v
-        }
+        },
         Err(e) => {
             tracing::warn!("Failed to fetch Valkey versions from Docker Hub: {}", e);
             vec![]
-        }
+        },
     };
 
     Json(ValkeyVersionsResponse {

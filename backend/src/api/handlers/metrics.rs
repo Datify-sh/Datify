@@ -92,7 +92,7 @@ pub async fn get_database_metrics_history(
         .as_deref()
         .map(|r| r.parse::<TimeRange>())
         .transpose()
-        .map_err(|e| AppError::Validation(e))?
+        .map_err(AppError::Validation)?
         .unwrap_or_default();
 
     let history = state

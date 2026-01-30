@@ -1,21 +1,21 @@
-import * as React from "react";
-import { useNavigate } from "react-router-dom";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { projectsApi } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Field, FieldLabel, FieldDescription } from "@/components/ui/field";
-import { Spinner } from "@/components/ui/spinner";
 import {
   Dialog,
+  DialogClose,
   DialogContent,
-  DialogHeader,
-  DialogTitle,
   DialogDescription,
   DialogFooter,
-  DialogClose,
+  DialogHeader,
+  DialogTitle,
 } from "@/components/ui/dialog";
+import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
+import { Textarea } from "@/components/ui/textarea";
+import { projectsApi } from "@/lib/api";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import * as React from "react";
+import { useNavigate } from "react-router-dom";
 
 interface CreateProjectDialogProps {
   open: boolean;
@@ -85,7 +85,9 @@ export function CreateProjectDialog({ open, onOpenChange }: CreateProjectDialogP
 
           <DialogFooter>
             <DialogClose asChild>
-              <Button type="button" variant="outline">Cancel</Button>
+              <Button type="button" variant="outline">
+                Cancel
+              </Button>
             </DialogClose>
             <Button type="submit" disabled={createMutation.isPending}>
               {createMutation.isPending && <Spinner className="size-4" />}

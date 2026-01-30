@@ -355,7 +355,7 @@ impl SqlService {
         let columns: Vec<ColumnInfo> = if rows.is_empty() {
             // Try to get column info by preparing the statement
             let stmt = client
-                .prepare(&sql)
+                .prepare(sql)
                 .await
                 .map_err(|e| AppError::Internal(format!("Failed to prepare statement: {}", e)))?;
 
@@ -384,11 +384,7 @@ impl SqlService {
         let result_rows: Vec<Vec<serde_json::Value>> = rows
             .iter()
             .take(take_rows)
-            .map(|row| {
-                (0..row.len())
-                    .map(|i| row_value_to_json(row, i))
-                    .collect()
-            })
+            .map(|row| (0..row.len()).map(|i| row_value_to_json(row, i)).collect())
             .collect();
 
         Ok(QueryResult {
@@ -487,11 +483,7 @@ impl SqlService {
 
         let result_rows: Vec<Vec<serde_json::Value>> = rows
             .iter()
-            .map(|row| {
-                (0..row.len())
-                    .map(|i| row_value_to_json(row, i))
-                    .collect()
-            })
+            .map(|row| (0..row.len()).map(|i| row_value_to_json(row, i)).collect())
             .collect();
 
         Ok(TablePreview {
@@ -587,7 +579,7 @@ fn row_value_to_json(row: &tokio_postgres::Row, index: usize) -> serde_json::Val
                 .flatten()
                 .and_then(|s| serde_json::from_str(&s).ok())
                 .unwrap_or(serde_json::Value::Null)
-        }
+        },
         _ => {
             // For all other types, try to get as string
             row.try_get::<_, Option<String>>(index)
@@ -595,7 +587,7 @@ fn row_value_to_json(row: &tokio_postgres::Row, index: usize) -> serde_json::Val
                 .flatten()
                 .map(serde_json::Value::String)
                 .unwrap_or(serde_json::Value::Null)
-        }
+        },
     }
 }
 

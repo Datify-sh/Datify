@@ -22,6 +22,7 @@ impl DatabaseRepository {
         Self { pool }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn create(
         &self,
         project_id: &str,
@@ -97,7 +98,8 @@ impl DatabaseRepository {
         offset: i64,
     ) -> AppResult<Vec<Database>> {
         let query = format!(
-            "SELECT {} FROM databases WHERE project_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
+            "SELECT {} FROM databases WHERE project_id = ? ORDER BY created_at DESC LIMIT ? \
+             OFFSET ?",
             DATABASE_COLUMNS
         );
         let databases = sqlx::query_as::<_, Database>(&query)
@@ -307,7 +309,8 @@ impl DatabaseRepository {
             .unwrap_or_else(|| database_id.to_string());
 
         let query = format!(
-            "SELECT {} FROM databases WHERE id = ? OR parent_branch_id = ? ORDER BY is_default_branch DESC, created_at ASC",
+            "SELECT {} FROM databases WHERE id = ? OR parent_branch_id = ? ORDER BY \
+             is_default_branch DESC, created_at ASC",
             DATABASE_COLUMNS
         );
         let databases = sqlx::query_as::<_, Database>(&query)
@@ -326,12 +329,9 @@ impl DatabaseRepository {
             let database = self.find_by_id(&current_id).await?;
 
             match database {
-                Some(db) => {
-                    if db.parent_branch_id.is_none() {
-                        return Ok(Some(db));
-                    } else {
-                        current_id = db.parent_branch_id.unwrap();
-                    }
+                Some(db) => match db.parent_branch_id {
+                    None => return Ok(Some(db)),
+                    Some(parent_id) => current_id = parent_id,
                 },
                 None => return Ok(None),
             }

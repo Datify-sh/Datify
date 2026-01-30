@@ -299,7 +299,11 @@ impl DockerManager {
             .await
             .map_err(|e| AppError::Docker(format!("Failed to create Valkey container: {}", e)))?;
 
-        tracing::info!("Created Valkey container {} with ID {}", config.name, container.id);
+        tracing::info!(
+            "Created Valkey container {} with ID {}",
+            config.name,
+            container.id
+        );
 
         Ok(container.id)
     }
@@ -561,9 +565,7 @@ impl DockerManager {
             .stderr(true)
             .timestamps(timestamps);
 
-        let tail = tail
-            .filter(|n| *n > 0)
-            .map(|n| n.min(MAX_LOG_LINES as i64));
+        let tail = tail.filter(|n| *n > 0).map(|n| n.min(MAX_LOG_LINES as i64));
 
         if let Some(n) = tail {
             builder = builder.tail(n.to_string().as_str());
@@ -581,8 +583,8 @@ impl DockerManager {
         let mut has_more = false;
 
         while let Some(result) = log_stream.next().await {
-            let output = result
-                .map_err(|e| AppError::Docker(format!("Failed to get logs: {}", e)))?;
+            let output =
+                result.map_err(|e| AppError::Docker(format!("Failed to get logs: {}", e)))?;
 
             if entries.len() >= MAX_LOG_LINES {
                 has_more = true;
@@ -610,9 +612,7 @@ impl DockerManager {
             .follow(true)
             .timestamps(true);
 
-        let tail = tail
-            .filter(|n| *n > 0)
-            .map(|n| n.min(MAX_LOG_LINES as i64));
+        let tail = tail.filter(|n| *n > 0).map(|n| n.min(MAX_LOG_LINES as i64));
 
         if let Some(n) = tail {
             builder = builder.tail(n.to_string().as_str());
@@ -736,8 +736,8 @@ impl DockerManager {
         );
 
         let restore_cmd = format!(
-            "PGPASSWORD='{}' PGCONNECT_TIMEOUT=10 pg_restore -h localhost -U {} -d postgres --clean --if-exists \
-             --no-owner --no-privileges",
+            "PGPASSWORD='{}' PGCONNECT_TIMEOUT=10 pg_restore -h localhost -U {} -d postgres \
+             --clean --if-exists --no-owner --no-privileges",
             target_password, target_username
         );
 

@@ -16,7 +16,9 @@ use crate::api::handlers::{
     ProjectServiceState, SqlState, TerminalState,
 };
 use crate::config::Settings;
-use crate::domain::services::{AuthService, DatabaseService, MetricsService, ProjectService, SqlService};
+use crate::domain::services::{
+    AuthService, DatabaseService, MetricsService, ProjectService, SqlService,
+};
 use crate::infrastructure::docker::DockerManager;
 use crate::middleware::{
     auth_middleware, auth_rate_limit_middleware, rate_limit_middleware,
@@ -83,8 +85,14 @@ pub async fn create_router(
         .route("/health", get(handlers::health))
         .route("/ready", get(handlers::ready).with_state(health_state))
         .route("/system", get(handlers::system_info))
-        .route("/system/postgres-versions", get(handlers::get_postgres_versions))
-        .route("/system/valkey-versions", get(handlers::get_valkey_versions));
+        .route(
+            "/system/postgres-versions",
+            get(handlers::get_postgres_versions),
+        )
+        .route(
+            "/system/valkey-versions",
+            get(handlers::get_valkey_versions),
+        );
 
     let auth_routes = Router::new()
         .route("/register", post(handlers::register))
@@ -152,7 +160,10 @@ pub async fn create_router(
         )
         .route("/{id}/start", post(handlers::start_database))
         .route("/{id}/stop", post(handlers::stop_database))
-        .route("/{id}/change-password", post(handlers::change_database_password))
+        .route(
+            "/{id}/change-password",
+            post(handlers::change_database_password),
+        )
         .route(
             "/{id}/branches",
             get(handlers::list_branches).post(handlers::create_branch),

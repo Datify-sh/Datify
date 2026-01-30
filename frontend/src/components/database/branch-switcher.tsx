@@ -1,17 +1,5 @@
-import * as React from "react";
-import { useQuery } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
-import { HugeiconsIcon } from "@hugeicons/react";
-import {
-  GitBranchIcon,
-  CheckmarkCircle02Icon,
-  Add01Icon,
-  ArrowRight01Icon,
-  Clock01Icon,
-} from "@hugeicons/core-free-icons";
-import { databasesApi, type BranchResponse } from "@/lib/api";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Command,
   CommandDialog,
@@ -23,8 +11,20 @@ import {
   CommandSeparator,
 } from "@/components/ui/command";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { type BranchResponse, databasesApi } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import {
+  Add01Icon,
+  ArrowRight01Icon,
+  CheckmarkCircle02Icon,
+  Clock01Icon,
+  GitBranchIcon,
+} from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { useQuery } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
+import * as React from "react";
+import { useNavigate } from "react-router-dom";
 
 interface BranchSwitcherProps {
   databaseId: string;

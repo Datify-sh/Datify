@@ -1,37 +1,9 @@
-import * as React from "react";
-import { useParams, Link, useNavigate } from "react-router-dom";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { HugeiconsIcon } from "@hugeicons/react";
-import {
-  Database01Icon,
-  PlayIcon,
-  PauseIcon,
-  Delete01Icon,
-  Copy01Icon,
-  RefreshIcon,
-  CommandLineIcon,
-  File01Icon,
-  Settings01Icon,
-  Globe02Icon,
-  SquareLock02Icon,
-  BarChartIcon,
-  ViewIcon,
-  ViewOffIcon,
-  GitBranchIcon,
-  ArrowDownIcon,
-} from "@hugeicons/core-free-icons";
-import { databasesApi, projectsApi, systemApi, type UpdateDatabaseRequest } from "@/lib/api";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Spinner } from "@/components/ui/spinner";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Input } from "@/components/ui/input";
-import { Field, FieldLabel, FieldDescription } from "@/components/ui/field";
-import { Switch } from "@/components/ui/switch";
-import { Slider } from "@/components/ui/slider";
-import { Progress } from "@/components/ui/progress";
+import { BranchPanel } from "@/components/database/branch-panel";
+import { BranchSwitcher } from "@/components/database/branch-switcher";
+import { CreateBranchDialog } from "@/components/database/create-branch-dialog";
+import { MetricsPanel } from "@/components/database/metrics-panel";
+import { QueryLogsPanel } from "@/components/database/query-logs-panel";
+import { TerminalComponent } from "@/components/terminal";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -43,16 +15,44 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { TerminalComponent } from "@/components/terminal";
-import { toast } from "sonner";
-import { format } from "date-fns";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { Progress } from "@/components/ui/progress";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Slider } from "@/components/ui/slider";
+import { Spinner } from "@/components/ui/spinner";
+import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useLogStream } from "@/hooks/use-log-stream";
-import { MetricsPanel } from "@/components/database/metrics-panel";
-import { QueryLogsPanel } from "@/components/database/query-logs-panel";
-import { BranchSwitcher } from "@/components/database/branch-switcher";
-import { BranchPanel } from "@/components/database/branch-panel";
-import { CreateBranchDialog } from "@/components/database/create-branch-dialog";
 import { useMetricsStream } from "@/hooks/use-metrics-stream";
+import { type UpdateDatabaseRequest, databasesApi, projectsApi, systemApi } from "@/lib/api";
+import {
+  ArrowDownIcon,
+  BarChartIcon,
+  CommandLineIcon,
+  Copy01Icon,
+  Database01Icon,
+  Delete01Icon,
+  File01Icon,
+  GitBranchIcon,
+  Globe02Icon,
+  PauseIcon,
+  PlayIcon,
+  RefreshIcon,
+  Settings01Icon,
+  SquareLock02Icon,
+  ViewIcon,
+  ViewOffIcon,
+} from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { format } from "date-fns";
+import * as React from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { toast } from "sonner";
 
 const statusColors: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
   running: "default",
@@ -910,7 +910,10 @@ export function DatabaseDetailPage() {
                   Shell
                 </Button>
               </div>
-              <TerminalPanel databaseId={database.id} type={isValkey && terminalType === "psql" ? "valkey-cli" : terminalType} />
+              <TerminalPanel
+                databaseId={database.id}
+                type={isValkey && terminalType === "psql" ? "valkey-cli" : terminalType}
+              />
             </div>
           ) : (
             <Card>

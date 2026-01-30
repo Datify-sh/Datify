@@ -1,16 +1,16 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Toaster } from "sonner";
-import { ThemeProvider } from "next-themes";
-import { AuthProvider } from "@/contexts/auth-context";
-import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { AuthLayout } from "@/components/layout/auth-layout";
+import { DashboardLayout } from "@/components/layout/dashboard-layout";
+import { AuthProvider } from "@/contexts/auth-context";
 import { LoginPage } from "@/pages/auth/login";
 import { RegisterPage } from "@/pages/auth/register";
 import { DashboardPage } from "@/pages/dashboard";
-import { ProjectsListPage } from "@/pages/projects/list";
-import { ProjectDetailPage } from "@/pages/projects/detail";
 import { DatabaseDetailPage } from "@/pages/databases/detail";
+import { ProjectDetailPage } from "@/pages/projects/detail";
+import { ProjectsListPage } from "@/pages/projects/list";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { ThemeProvider } from "next-themes";
+import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { Toaster } from "sonner";
 
 const queryClient = new QueryClient({
   defaultOptions: {

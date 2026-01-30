@@ -1,20 +1,3 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
-import { HugeiconsIcon } from "@hugeicons/react";
-import {
-  GitBranchIcon,
-  ArrowRight01Icon,
-  Add01Icon,
-  Delete01Icon,
-  Clock01Icon,
-  CheckmarkCircle02Icon,
-} from "@hugeicons/core-free-icons";
-import { databasesApi, type BranchResponse } from "@/lib/api";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Spinner } from "@/components/ui/spinner";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,10 +9,27 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { toast } from "sonner";
-import { formatDistanceToNow, format } from "date-fns";
+import { type BranchResponse, databasesApi } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import {
+  Add01Icon,
+  ArrowRight01Icon,
+  CheckmarkCircle02Icon,
+  Clock01Icon,
+  Delete01Icon,
+  GitBranchIcon,
+} from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { format, formatDistanceToNow } from "date-fns";
+import { Link } from "react-router-dom";
+import { toast } from "sonner";
 
 interface BranchPanelProps {
   databaseId: string;

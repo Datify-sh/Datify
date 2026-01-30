@@ -1,22 +1,13 @@
-import * as React from "react";
-import { NavLink, useLocation } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
-import { useTheme } from "next-themes";
-import { HugeiconsIcon } from "@hugeicons/react";
+import { CreateProjectDialog } from "@/components/create-project-dialog";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
-  Home01Icon,
-  Folder01Icon,
-  Settings01Icon,
-  Logout01Icon,
-  Add01Icon,
-  ArrowRight01Icon,
-  GitBranchIcon,
-  Moon02Icon,
-  Sun03Icon,
-  ComputerIcon,
-} from "@hugeicons/core-free-icons";
-import { useAuth } from "@/contexts/auth-context";
-import { projectsApi, databasesApi } from "@/lib/api";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Sidebar,
   SidebarContent,
@@ -30,20 +21,29 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarMenuSub,
-  SidebarMenuSubItem,
   SidebarMenuSubButton,
+  SidebarMenuSubItem,
 } from "@/components/ui/sidebar";
-import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { CreateProjectDialog } from "@/components/create-project-dialog";
+import { useAuth } from "@/contexts/auth-context";
+import { databasesApi, projectsApi } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import {
+  Add01Icon,
+  ArrowRight01Icon,
+  ComputerIcon,
+  Folder01Icon,
+  GitBranchIcon,
+  Home01Icon,
+  Logout01Icon,
+  Moon02Icon,
+  Settings01Icon,
+  Sun03Icon,
+} from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { useQuery } from "@tanstack/react-query";
+import { useTheme } from "next-themes";
+import * as React from "react";
+import { NavLink, useLocation } from "react-router-dom";
 
 const mainNavItems = [
   {
@@ -152,13 +152,16 @@ export function AppSidebar({ variant = "inset" }: { variant?: "sidebar" | "float
             <SidebarMenuItem>
               <SidebarMenuButton
                 onClick={() => {
-                  const nextTheme = theme === "system" ? "light" : theme === "light" ? "dark" : "system";
+                  const nextTheme =
+                    theme === "system" ? "light" : theme === "light" ? "dark" : "system";
                   setTheme(nextTheme);
                 }}
                 tooltip={`Theme: ${theme === "system" ? "System" : theme === "light" ? "Light" : "Dark"}`}
               >
                 <HugeiconsIcon
-                  icon={theme === "system" ? ComputerIcon : theme === "light" ? Sun03Icon : Moon02Icon}
+                  icon={
+                    theme === "system" ? ComputerIcon : theme === "light" ? Sun03Icon : Moon02Icon
+                  }
                   className="size-[18px]"
                   strokeWidth={2}
                 />
@@ -283,8 +286,20 @@ function DatabaseItem({
   branches,
   currentPath,
 }: {
-  database: { id: string; name: string; status: string; database_type?: string; branch?: { name: string } };
-  branches: Array<{ id: string; name: string; status: string; database_type?: string; branch?: { name: string } }>;
+  database: {
+    id: string;
+    name: string;
+    status: string;
+    database_type?: string;
+    branch?: { name: string };
+  };
+  branches: Array<{
+    id: string;
+    name: string;
+    status: string;
+    database_type?: string;
+    branch?: { name: string };
+  }>;
   currentPath: string;
 }) {
   const hasBranches = branches.length > 0;
@@ -304,9 +319,7 @@ function DatabaseItem({
                   statusColors[database.status] || "bg-neutral-400",
                 )}
               />
-              <span className="truncate font-mono text-xs">
-                {database.name}
-              </span>
+              <span className="truncate font-mono text-xs">{database.name}</span>
               <span className="ml-auto text-[9px] text-muted-foreground uppercase">
                 {database.database_type === "valkey" ? "valkey" : "pg"}
               </span>
@@ -337,9 +350,7 @@ function DatabaseItem({
                     statusColors[database.status] || "bg-neutral-400",
                   )}
                 />
-                <span className="truncate font-mono text-xs">
-                  {database.name}
-                </span>
+                <span className="truncate font-mono text-xs">{database.name}</span>
                 <span className="ml-auto flex items-center gap-1.5">
                   <span className="text-[9px] text-muted-foreground uppercase">
                     {database.database_type === "valkey" ? "valkey" : "pg"}

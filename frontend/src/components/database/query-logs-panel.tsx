@@ -1,12 +1,11 @@
-import * as React from "react";
-import { useQuery } from "@tanstack/react-query";
+import { ClockIcon, File01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { File01Icon, ClockIcon } from "@hugeicons/core-free-icons";
+import { useQuery } from "@tanstack/react-query";
+import * as React from "react";
 
-import { databasesApi } from "@/lib/api";
-import type { QueryLogEntry } from "@/lib/api/types";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -15,7 +14,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Skeleton } from "@/components/ui/skeleton";
+import { databasesApi } from "@/lib/api";
+import type { QueryLogEntry } from "@/lib/api/types";
 
 interface QueryLogsPanelProps {
   databaseId: string;

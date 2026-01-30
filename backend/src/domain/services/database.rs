@@ -6,7 +6,9 @@ use aes_gcm::{
 };
 use rand::RngCore;
 
-use crate::domain::models::{BranchResponse, Database, DatabaseResponse, PostgresVersion, ValkeyVersion};
+use crate::domain::models::{
+    BranchResponse, Database, DatabaseResponse, PostgresVersion, ValkeyVersion,
+};
 use crate::error::{AppError, AppResult};
 use crate::infrastructure::docker::{ContainerConfig, DockerManager};
 use crate::repositories::{DatabaseRepository, ProjectRepository};
@@ -84,6 +86,7 @@ impl DatabaseService {
             .map_err(|e| AppError::Internal(format!("Invalid UTF-8 in password: {}", e)))
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn create(
         &self,
         project_id: &str,
@@ -128,9 +131,7 @@ impl DatabaseService {
         if is_valkey {
             let version = valkey_version.unwrap_or("8.0");
             if !ValkeyVersion::is_valid(version) {
-                return Err(AppError::Validation(
-                    "Invalid Valkey version".to_string(),
-                ));
+                return Err(AppError::Validation("Invalid Valkey version".to_string()));
             }
         } else if !PostgresVersion::is_valid(postgres_version) {
             return Err(AppError::Validation(
@@ -167,7 +168,9 @@ impl DatabaseService {
             )
             .await?;
 
-        let password = password.map(|p| p.to_string()).unwrap_or_else(generate_password);
+        let password = password
+            .map(|p| p.to_string())
+            .unwrap_or_else(generate_password);
 
         let port = self.database_repo.get_next_available_port().await?;
 
@@ -189,7 +192,9 @@ impl DatabaseService {
                 exposed_port: Some(port as u16),
                 cmd: None,
             };
-            self.docker.create_valkey_container(config, &password).await?
+            self.docker
+                .create_valkey_container(config, &password)
+                .await?
         } else {
             let config = ContainerConfig {
                 name: database.container_name(),
@@ -211,7 +216,9 @@ impl DatabaseService {
                     "pg_stat_statements.track=all".to_string(),
                 ]),
             };
-            self.docker.create_postgres_container(config, &password).await?
+            self.docker
+                .create_postgres_container(config, &password)
+                .await?
         };
 
         self.docker.start_container(&container_id).await?;
@@ -285,6 +292,7 @@ impl DatabaseService {
             .collect())
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn update(
         &self,
         id: &str,
@@ -423,7 +431,9 @@ impl DatabaseService {
             .ok_or_else(|| AppError::Internal("No password stored for database".to_string()))?;
 
         if stored_password != current_password {
-            return Err(AppError::Validation("Current password is incorrect".to_string()));
+            return Err(AppError::Validation(
+                "Current password is incorrect".to_string(),
+            ));
         }
 
         if new_password.len() < 8 {

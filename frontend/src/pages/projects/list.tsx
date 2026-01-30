@@ -1,29 +1,4 @@
-import * as React from "react";
-import { Link } from "react-router-dom";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { HugeiconsIcon } from "@hugeicons/react";
-import {
-  Folder01Icon,
-  Database01Icon,
-  Add01Icon,
-  Search01Icon,
-  MoreHorizontalIcon,
-  Delete01Icon,
-  Edit01Icon,
-} from "@hugeicons/core-free-icons";
-import { projectsApi } from "@/lib/api";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { CreateProjectDialog } from "@/components/create-project-dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -34,9 +9,34 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { CreateProjectDialog } from "@/components/create-project-dialog";
-import { toast } from "sonner";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
+import { projectsApi } from "@/lib/api";
+import {
+  Add01Icon,
+  Database01Icon,
+  Delete01Icon,
+  Edit01Icon,
+  Folder01Icon,
+  MoreHorizontalIcon,
+  Search01Icon,
+} from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
+import * as React from "react";
+import { Link } from "react-router-dom";
+import { toast } from "sonner";
 
 export function ProjectsListPage() {
   const [search, setSearch] = React.useState("");
@@ -154,7 +154,11 @@ export function ProjectsListPage() {
                         size="icon-sm"
                         className="relative z-10 opacity-0 group-hover:opacity-100"
                       >
-                        <HugeiconsIcon icon={MoreHorizontalIcon} className="size-4" strokeWidth={2} />
+                        <HugeiconsIcon
+                          icon={MoreHorizontalIcon}
+                          className="size-4"
+                          strokeWidth={2}
+                        />
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">

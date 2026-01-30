@@ -1,19 +1,19 @@
-import * as React from "react";
-import { Outlet, Navigate, useLocation, Link } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
-import { useAuth } from "@/contexts/auth-context";
-import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
-import { AppSidebar } from "./app-sidebar";
-import { Spinner } from "@/components/ui/spinner";
 import {
   Breadcrumb,
-  BreadcrumbList,
   BreadcrumbItem,
   BreadcrumbLink,
+  BreadcrumbList,
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
-import { projectsApi, databasesApi } from "@/lib/api";
+import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { Spinner } from "@/components/ui/spinner";
+import { useAuth } from "@/contexts/auth-context";
+import { databasesApi, projectsApi } from "@/lib/api";
+import { useQuery } from "@tanstack/react-query";
+import * as React from "react";
+import { Link, Navigate, Outlet, useLocation } from "react-router-dom";
+import { AppSidebar } from "./app-sidebar";
 
 function useBreadcrumbs() {
   const location = useLocation();

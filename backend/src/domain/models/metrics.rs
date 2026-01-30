@@ -4,9 +4,11 @@ use utoipa::ToSchema;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, ToSchema, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum TimeRange {
     Realtime,
     Last5Min,
+    #[default]
     Last15Min,
     Last30Min,
     Last1Hour,
@@ -34,12 +36,6 @@ impl TimeRange {
             TimeRange::Last1Hour => 60,
             TimeRange::Last24Hours => 300,
         }
-    }
-}
-
-impl Default for TimeRange {
-    fn default() -> Self {
-        TimeRange::Last15Min
     }
 }
 

@@ -1,4 +1,4 @@
-import type { SystemInfoResponse, PostgresVersionsResponse, ValkeyVersionsResponse } from "./types";
+import type { PostgresVersionsResponse, SystemInfoResponse, ValkeyVersionsResponse } from "./types";
 
 export const systemApi = {
   getInfo: async (): Promise<SystemInfoResponse> => {

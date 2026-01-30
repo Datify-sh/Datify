@@ -1,28 +1,15 @@
-import * as React from "react";
-import { useParams, Link } from "react-router-dom";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { HugeiconsIcon } from "@hugeicons/react";
-import {
-  Database01Icon,
-  Add01Icon,
-  PlayIcon,
-  PauseIcon,
-  Delete01Icon,
-  Copy01Icon,
-  MoreHorizontalIcon,
-  Settings01Icon,
-  ArrowRight01Icon,
-  Globe02Icon,
-  SquareLock02Icon,
-  GitBranchIcon,
-} from "@hugeicons/core-free-icons";
-import { projectsApi, databasesApi, systemApi, type DatabaseResponse, type DatabaseType } from "@/lib/api";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Spinner } from "@/components/ui/spinner";
-import { Switch } from "@/components/ui/switch";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -30,17 +17,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-  DialogClose,
-} from "@/components/ui/dialog";
+import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Field, FieldLabel, FieldDescription } from "@/components/ui/field";
 import {
   Select,
   SelectContent,
@@ -48,9 +26,37 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { toast } from "sonner";
-import { format } from "date-fns";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
+import { Switch } from "@/components/ui/switch";
+import {
+  type DatabaseResponse,
+  type DatabaseType,
+  databasesApi,
+  projectsApi,
+  systemApi,
+} from "@/lib/api";
 import { cn } from "@/lib/utils";
+import {
+  Add01Icon,
+  ArrowRight01Icon,
+  Copy01Icon,
+  Database01Icon,
+  Delete01Icon,
+  GitBranchIcon,
+  Globe02Icon,
+  MoreHorizontalIcon,
+  PauseIcon,
+  PlayIcon,
+  Settings01Icon,
+  SquareLock02Icon,
+} from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { format } from "date-fns";
+import * as React from "react";
+import { Link, useParams } from "react-router-dom";
+import { toast } from "sonner";
 
 const statusDots: Record<string, string> = {
   running: "bg-green-500",
@@ -325,7 +331,14 @@ export function ProjectDetailPage() {
   const defaultValkeyVersion = valkeyVersionsData?.default_version || "8.0";
 
   const createMutation = useMutation({
-    mutationFn: (data: { name: string; database_type?: DatabaseType; postgres_version?: string; valkey_version?: string; password?: string; public_exposed?: boolean }) => {
+    mutationFn: (data: {
+      name: string;
+      database_type?: DatabaseType;
+      postgres_version?: string;
+      valkey_version?: string;
+      password?: string;
+      public_exposed?: boolean;
+    }) => {
       if (!id) return Promise.reject(new Error("Project ID is required"));
       return databasesApi.create(id, data);
     },
@@ -350,8 +363,10 @@ export function ProjectDetailPage() {
     createMutation.mutate({
       name: formData.get("name") as string,
       database_type: databaseType,
-      postgres_version: databaseType === "postgres" ? (formData.get("postgres_version") as string) : undefined,
-      valkey_version: databaseType === "valkey" ? (formData.get("valkey_version") as string) : undefined,
+      postgres_version:
+        databaseType === "postgres" ? (formData.get("postgres_version") as string) : undefined,
+      valkey_version:
+        databaseType === "valkey" ? (formData.get("valkey_version") as string) : undefined,
       password: password || undefined,
       public_exposed: publicExposed,
     });
@@ -461,9 +476,7 @@ export function ProjectDetailPage() {
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-lg font-semibold">Databases</h2>
-            <p className="text-sm text-muted-foreground">
-              Manage your database instances
-            </p>
+            <p className="text-sm text-muted-foreground">Manage your database instances</p>
           </div>
           <Button variant="outline" size="sm" onClick={() => setIsCreateOpen(true)}>
             <HugeiconsIcon icon={Add01Icon} className="size-4" strokeWidth={2} />
@@ -522,7 +535,10 @@ export function ProjectDetailPage() {
               </Field>
               <Field>
                 <FieldLabel>Database Type</FieldLabel>
-                <Select value={databaseType} onValueChange={(v) => setDatabaseType(v as DatabaseType)}>
+                <Select
+                  value={databaseType}
+                  onValueChange={(v) => setDatabaseType(v as DatabaseType)}
+                >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -542,7 +558,8 @@ export function ProjectDetailPage() {
                     <SelectContent>
                       {postgresVersions.map((v) => (
                         <SelectItem key={v.version} value={v.version}>
-                          PostgreSQL {v.version}{v.is_latest ? " (Latest)" : ""}
+                          PostgreSQL {v.version}
+                          {v.is_latest ? " (Latest)" : ""}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -558,7 +575,8 @@ export function ProjectDetailPage() {
                     <SelectContent>
                       {valkeyVersions.map((v) => (
                         <SelectItem key={v.version} value={v.version}>
-                          Valkey {v.version}{v.is_latest ? " (Latest)" : ""}
+                          Valkey {v.version}
+                          {v.is_latest ? " (Latest)" : ""}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -569,7 +587,9 @@ export function ProjectDetailPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <FieldLabel>Custom Password</FieldLabel>
-                    <FieldDescription>Set your own password instead of generating one</FieldDescription>
+                    <FieldDescription>
+                      Set your own password instead of generating one
+                    </FieldDescription>
                   </div>
                   <Switch checked={useCustomPassword} onCheckedChange={setUseCustomPassword} />
                 </div>
@@ -577,7 +597,13 @@ export function ProjectDetailPage() {
               {useCustomPassword && (
                 <Field>
                   <FieldLabel>Password</FieldLabel>
-                  <Input name="password" type="password" placeholder="Enter password" required minLength={8} />
+                  <Input
+                    name="password"
+                    type="password"
+                    placeholder="Enter password"
+                    required
+                    minLength={8}
+                  />
                   <FieldDescription>Minimum 8 characters</FieldDescription>
                 </Field>
               )}
@@ -593,7 +619,9 @@ export function ProjectDetailPage() {
             </div>
             <DialogFooter>
               <DialogClose asChild>
-                <Button type="button" variant="outline">Cancel</Button>
+                <Button type="button" variant="outline">
+                  Cancel
+                </Button>
               </DialogClose>
               <Button type="submit" disabled={createMutation.isPending}>
                 {createMutation.isPending && <Spinner className="size-4" />}

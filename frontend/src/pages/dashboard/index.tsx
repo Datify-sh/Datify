@@ -1,24 +1,24 @@
+import { CreateProjectDialog } from "@/components/create-project-dialog";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useAuth } from "@/contexts/auth-context";
+import { type DatabaseResponse, databasesApi, projectsApi } from "@/lib/api";
+import {
+  Add01Icon,
+  ArrowRight01Icon,
+  Copy01Icon,
+  Database01Icon,
+  Folder01Icon,
+  PlayIcon,
+} from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { useQuery } from "@tanstack/react-query";
+import { format } from "date-fns";
 import * as React from "react";
 import { Link } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
-import { HugeiconsIcon } from "@hugeicons/react";
-import {
-  Folder01Icon,
-  Database01Icon,
-  ArrowRight01Icon,
-  Add01Icon,
-  PlayIcon,
-  Copy01Icon,
-} from "@hugeicons/core-free-icons";
-import { projectsApi, databasesApi, type DatabaseResponse } from "@/lib/api";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Badge } from "@/components/ui/badge";
-import { CreateProjectDialog } from "@/components/create-project-dialog";
-import { useAuth } from "@/contexts/auth-context";
 import { toast } from "sonner";
-import { format } from "date-fns";
 
 export function DashboardPage() {
   const { user } = useAuth();
@@ -63,9 +63,7 @@ export function DashboardPage() {
           <h1 className="text-2xl font-semibold tracking-tight">
             Welcome back, {user?.name?.split(" ")[0]}
           </h1>
-          <p className="text-muted-foreground">
-            Here's what's happening with your databases
-          </p>
+          <p className="text-muted-foreground">Here's what's happening with your databases</p>
         </div>
         <Button onClick={() => setCreateOpen(true)}>
           <HugeiconsIcon icon={Add01Icon} className="size-4" strokeWidth={2} />
@@ -77,7 +75,11 @@ export function DashboardPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium">Projects</CardTitle>
-            <HugeiconsIcon icon={Folder01Icon} className="size-4 text-muted-foreground" strokeWidth={2} />
+            <HugeiconsIcon
+              icon={Folder01Icon}
+              className="size-4 text-muted-foreground"
+              strokeWidth={2}
+            />
           </CardHeader>
           <CardContent>
             {isLoading ? (
@@ -91,7 +93,11 @@ export function DashboardPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium">Databases</CardTitle>
-            <HugeiconsIcon icon={Database01Icon} className="size-4 text-muted-foreground" strokeWidth={2} />
+            <HugeiconsIcon
+              icon={Database01Icon}
+              className="size-4 text-muted-foreground"
+              strokeWidth={2}
+            />
           </CardHeader>
           <CardContent>
             {isLoading ? (
@@ -105,7 +111,11 @@ export function DashboardPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium">Running</CardTitle>
-            <HugeiconsIcon icon={PlayIcon} className="size-4 text-muted-foreground" strokeWidth={2} />
+            <HugeiconsIcon
+              icon={PlayIcon}
+              className="size-4 text-muted-foreground"
+              strokeWidth={2}
+            />
           </CardHeader>
           <CardContent>
             {isLoading || databasesLoading ? (
@@ -137,13 +147,19 @@ export function DashboardPage() {
               >
                 <div className="flex items-center gap-3">
                   <div className="flex size-9 items-center justify-center rounded-md bg-primary/10">
-                    <HugeiconsIcon icon={Database01Icon} className="size-4 text-primary" strokeWidth={2} />
+                    <HugeiconsIcon
+                      icon={Database01Icon}
+                      className="size-4 text-primary"
+                      strokeWidth={2}
+                    />
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
                       <span className="font-medium font-mono text-sm">{db.name}</span>
                       <Badge variant="outline" className="text-[10px] h-5">
-                        {db.database_type === "valkey" ? `Valkey ${db.valkey_version}` : `PG ${db.postgres_version}`}
+                        {db.database_type === "valkey"
+                          ? `Valkey ${db.valkey_version}`
+                          : `PG ${db.postgres_version}`}
                       </Badge>
                     </div>
                     <p className="text-xs text-muted-foreground">
@@ -208,7 +224,11 @@ export function DashboardPage() {
           <Card>
             <CardContent className="flex flex-col items-center justify-center py-16">
               <div className="flex size-14 items-center justify-center rounded-full bg-muted">
-                <HugeiconsIcon icon={Database01Icon} className="size-7 text-muted-foreground" strokeWidth={1.5} />
+                <HugeiconsIcon
+                  icon={Database01Icon}
+                  className="size-7 text-muted-foreground"
+                  strokeWidth={1.5}
+                />
               </div>
               <h3 className="mt-4 text-lg font-semibold">No projects yet</h3>
               <p className="mt-1 text-sm text-muted-foreground text-center max-w-sm">
@@ -233,7 +253,9 @@ export function DashboardPage() {
                       </Badge>
                     </div>
                     {project.description && (
-                      <CardDescription className="line-clamp-2">{project.description}</CardDescription>
+                      <CardDescription className="line-clamp-2">
+                        {project.description}
+                      </CardDescription>
                     )}
                   </CardHeader>
                   <CardContent>

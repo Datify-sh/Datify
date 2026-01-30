@@ -1,6 +1,6 @@
-import * as React from "react";
-import type { DatabaseMetrics, MetricsStreamMessage } from "@/lib/api/types";
 import { databasesApi } from "@/lib/api";
+import type { DatabaseMetrics, MetricsStreamMessage } from "@/lib/api/types";
+import * as React from "react";
 
 interface UseMetricsStreamOptions {
   enabled?: boolean;

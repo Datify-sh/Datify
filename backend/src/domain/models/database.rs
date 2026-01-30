@@ -17,12 +17,16 @@ impl DatabaseType {
             Self::Valkey => "valkey",
         }
     }
+}
 
-    pub fn from_str(s: &str) -> Option<Self> {
+impl std::str::FromStr for DatabaseType {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
-            "postgres" => Some(Self::Postgres),
-            "valkey" => Some(Self::Valkey),
-            _ => None,
+            "postgres" => Ok(Self::Postgres),
+            "valkey" => Ok(Self::Valkey),
+            _ => Err(format!("Unknown database type: {}", s)),
         }
     }
 }
@@ -201,8 +205,15 @@ pub struct ResourceLimits {
 
 impl Database {
     pub fn container_name(&self) -> String {
-        let prefix = if self.database_type == "valkey" { "datify-valkey" } else { "datify-pg" };
-        let sanitized = self.name.to_lowercase().replace(|c: char| !c.is_alphanumeric(), "-");
+        let prefix = if self.database_type == "valkey" {
+            "datify-valkey"
+        } else {
+            "datify-pg"
+        };
+        let sanitized = self
+            .name
+            .to_lowercase()
+            .replace(|c: char| !c.is_alphanumeric(), "-");
         format!("{}-{}", prefix, sanitized)
     }
 
@@ -222,11 +233,17 @@ impl Database {
                 let internal_port = if is_valkey { 6379 } else { 5432 };
                 let container_name = self.container_name();
                 let host = if self.public_exposed {
-                    public_host.unwrap_or_else(|| self.host.as_deref().unwrap_or("localhost")).to_string()
+                    public_host
+                        .unwrap_or_else(|| self.host.as_deref().unwrap_or("localhost"))
+                        .to_string()
                 } else {
                     container_name.clone()
                 };
-                let display_port = if self.public_exposed { port } else { internal_port };
+                let display_port = if self.public_exposed {
+                    port
+                } else {
+                    internal_port
+                };
 
                 let (database, connection_string) = if is_valkey {
                     (

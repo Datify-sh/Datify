@@ -1,10 +1,10 @@
 import { apiClient } from "./client";
 import type {
   CreateProjectRequest,
-  UpdateProjectRequest,
+  PaginatedResponse,
   ProjectResponse,
   ProjectWithStats,
-  PaginatedResponse,
+  UpdateProjectRequest,
 } from "./types";
 
 export const projectsApi = {

@@ -75,7 +75,9 @@ pub async fn execute_query(
 
     let sql = request.sql.trim();
     if sql.is_empty() {
-        return Err(AppError::Validation("SQL query cannot be empty".to_string()));
+        return Err(AppError::Validation(
+            "SQL query cannot be empty".to_string(),
+        ));
     }
 
     // Limit between 1 and 10000, default 1000

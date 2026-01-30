@@ -1,10 +1,10 @@
 import { apiClient } from "./client";
 import type {
+  AuthTokens,
   LoginRequest,
   LoginResponse,
-  RegisterRequest,
   RefreshRequest,
-  AuthTokens,
+  RegisterRequest,
   UserResponse,
 } from "./types";
 
