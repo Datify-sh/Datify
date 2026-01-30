@@ -3,7 +3,7 @@ import { BranchSwitcher } from "@/components/database/branch-switcher";
 import { CreateBranchDialog } from "@/components/database/create-branch-dialog";
 import { MetricsPanel } from "@/components/database/metrics-panel";
 import { QueryLogsPanel } from "@/components/database/query-logs-panel";
-import { TerminalComponent } from "@/components/terminal";
+import { TerminalComponent, type TerminalRef } from "@/components/terminal";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -49,6 +49,7 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { format } from "date-fns";
 import * as React from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
@@ -64,7 +65,6 @@ const statusColors: Record<string, "default" | "secondary" | "destructive" | "ou
 
 const LogsPanel = React.memo(function LogsPanel({ databaseId }: { databaseId: string }) {
   const [streaming, setStreaming] = React.useState(true);
-  const logsEndRef = React.useRef<HTMLDivElement>(null);
   const scrollContainerRef = React.useRef<HTMLDivElement>(null);
 
   const { entries, isConnected, isConnecting, clear } = useLogStream(databaseId, {
@@ -72,12 +72,20 @@ const LogsPanel = React.memo(function LogsPanel({ databaseId }: { databaseId: st
     enabled: streaming,
   });
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: entries.length triggers auto-scroll when new logs arrive
+  const virtualizer = useVirtualizer({
+    count: entries.length,
+    getScrollElement: () => scrollContainerRef.current,
+    estimateSize: () => 24,
+    overscan: 10,
+  });
+
+  const prevEntriesLengthRef = React.useRef(entries.length);
   React.useEffect(() => {
-    if (logsEndRef.current && streaming) {
-      logsEndRef.current.scrollIntoView({ behavior: "smooth" });
+    if (streaming && entries.length > prevEntriesLengthRef.current && scrollContainerRef.current) {
+      virtualizer.scrollToIndex(entries.length - 1, { align: "end" });
     }
-  }, [entries.length, streaming]);
+    prevEntriesLengthRef.current = entries.length;
+  }, [entries.length, streaming, virtualizer]);
 
   const toggleStreaming = React.useCallback(() => setStreaming((s) => !s), []);
 
@@ -116,23 +124,29 @@ const LogsPanel = React.memo(function LogsPanel({ databaseId }: { databaseId: st
             No logs available
           </div>
         ) : (
-          <div className="p-4 space-y-0.5">
-            {entries.map((entry) => (
-              <div
-                key={`${entry.timestamp}-${entry.message.slice(0, 20)}`}
-                className="flex gap-3 text-xs leading-relaxed hover:bg-white/5 px-2 py-0.5 rounded"
-              >
-                {entry.timestamp && (
-                  <span className="text-neutral-500 shrink-0 tabular-nums">
-                    {format(new Date(entry.timestamp), "HH:mm:ss")}
+          <div className="relative w-full" style={{ height: `${virtualizer.getTotalSize()}px` }}>
+            {virtualizer.getVirtualItems().map((virtualRow) => {
+              const entry = entries[virtualRow.index];
+              return (
+                <div
+                  key={virtualRow.key}
+                  className="absolute left-0 w-full flex gap-3 text-xs leading-relaxed hover:bg-white/5 px-4 py-0.5"
+                  style={{
+                    height: `${virtualRow.size}px`,
+                    transform: `translateY(${virtualRow.start}px)`,
+                  }}
+                >
+                  {entry.timestamp && (
+                    <span className="text-neutral-500 shrink-0 tabular-nums">
+                      {format(new Date(entry.timestamp), "HH:mm:ss")}
+                    </span>
+                  )}
+                  <span className={entry.stream === "stderr" ? "text-red-400" : "text-neutral-300"}>
+                    {entry.message}
                   </span>
-                )}
-                <span className={entry.stream === "stderr" ? "text-red-400" : "text-neutral-300"}>
-                  {entry.message}
-                </span>
-              </div>
-            ))}
-            <div ref={logsEndRef} />
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
@@ -145,7 +159,7 @@ const TerminalPanel = React.memo(function TerminalPanel({
   type,
 }: { databaseId: string; type: "shell" | "psql" | "valkey-cli" | "redis-cli" }) {
   const [isConnected, setIsConnected] = React.useState(false);
-  const [key, setKey] = React.useState(0);
+  const terminalRef = React.useRef<TerminalRef>(null);
 
   const wsUrl = React.useMemo(() => {
     if (type === "psql") return databasesApi.getPsqlUrl(databaseId);
@@ -154,7 +168,9 @@ const TerminalPanel = React.memo(function TerminalPanel({
     return databasesApi.getTerminalUrl(databaseId);
   }, [type, databaseId]);
 
-  const handleReconnect = React.useCallback(() => setKey((k) => k + 1), []);
+  const handleReconnect = React.useCallback(() => {
+    terminalRef.current?.reconnect();
+  }, []);
   const handleConnected = React.useCallback(() => setIsConnected(true), []);
   const handleDisconnected = React.useCallback(() => setIsConnected(false), []);
 
@@ -177,7 +193,7 @@ const TerminalPanel = React.memo(function TerminalPanel({
 
       <div className="h-[500px] rounded-lg border overflow-hidden">
         <TerminalComponent
-          key={key}
+          ref={terminalRef}
           wsUrl={wsUrl}
           onConnected={handleConnected}
           onDisconnected={handleDisconnected}

@@ -89,10 +89,10 @@ impl RateLimitState {
 
         let buckets = state.buckets.clone();
         tokio::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(300));
+            let mut interval = tokio::time::interval(Duration::from_secs(60));
             loop {
                 interval.tick().await;
-                let threshold = Instant::now() - Duration::from_secs(3600);
+                let threshold = Instant::now() - Duration::from_secs(300);
                 buckets.retain(|_, bucket| bucket.last_access > threshold);
             }
         });

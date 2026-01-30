@@ -17,6 +17,7 @@ interface UseLogStreamResult {
 
 const MAX_RECONNECT_ATTEMPTS = 5;
 const BASE_RECONNECT_DELAY = 1000;
+const MAX_LOG_ENTRIES = 500;
 
 export function useLogStream(
   databaseId: string,
@@ -32,6 +33,7 @@ export function useLogStream(
   const wsRef = React.useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectAttemptsRef = React.useRef(0);
+  const isMountedRef = React.useRef(true);
 
   const clear = React.useCallback(() => {
     setEntries([]);
@@ -42,9 +44,11 @@ export function useLogStream(
       return;
     }
 
+    isMountedRef.current = true;
     reconnectAttemptsRef.current = 0;
 
     const connect = () => {
+      if (!isMountedRef.current) return;
       setIsConnecting(true);
       setError(null);
 
@@ -53,6 +57,7 @@ export function useLogStream(
       wsRef.current = ws;
 
       ws.onopen = () => {
+        if (!isMountedRef.current) return;
         setIsConnected(true);
         setIsConnecting(false);
         setError(null);
@@ -60,15 +65,27 @@ export function useLogStream(
       };
 
       ws.onmessage = (event) => {
+        if (!isMountedRef.current) return;
         try {
           const data = JSON.parse(event.data);
 
           if (data.type === "initial" && Array.isArray(data.entries)) {
-            setEntries(data.entries);
+            const entries = data.entries.slice(-MAX_LOG_ENTRIES);
+            setEntries(entries);
           } else if (data.type === "log" && data.entry) {
-            setEntries((prev) => [...prev, data.entry]);
+            setEntries((prev) => {
+              const newEntries = [...prev, data.entry];
+              return newEntries.length > MAX_LOG_ENTRIES
+                ? newEntries.slice(-MAX_LOG_ENTRIES)
+                : newEntries;
+            });
           } else if (data.log_type && data.message !== undefined) {
-            setEntries((prev) => [...prev, data as LogEntryResponse]);
+            setEntries((prev) => {
+              const newEntries = [...prev, data as LogEntryResponse];
+              return newEntries.length > MAX_LOG_ENTRIES
+                ? newEntries.slice(-MAX_LOG_ENTRIES)
+                : newEntries;
+            });
           }
         } catch {
           /* ignore */
@@ -76,12 +93,14 @@ export function useLogStream(
       };
 
       ws.onerror = () => {
+        if (!isMountedRef.current) return;
         setError("Connection error");
         setIsConnected(false);
         setIsConnecting(false);
       };
 
       ws.onclose = () => {
+        if (!isMountedRef.current) return;
         setIsConnected(false);
         setIsConnecting(false);
 
@@ -98,6 +117,7 @@ export function useLogStream(
     connect();
 
     return () => {
+      isMountedRef.current = false;
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
       }

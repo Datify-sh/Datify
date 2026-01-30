@@ -42,7 +42,7 @@ export function DashboardPage() {
       return results.flatMap((r) => r.data);
     },
     enabled: projects.length > 0,
-    refetchInterval: 10000,
+    refetchInterval: 30000,
   });
 
   const allDatabases = allDatabasesData || [];

@@ -343,39 +343,35 @@ impl SqlService {
 
         let start = Instant::now();
 
-        // Execute the query
+        let stmt = client
+            .prepare(sql)
+            .await
+            .map_err(|e| AppError::Validation(format!("Query preparation failed: {}", e)))?;
+
+        let columns: Vec<ColumnInfo> = stmt
+            .columns()
+            .iter()
+            .map(|col| ColumnInfo {
+                name: col.name().to_string(),
+                data_type: type_to_string(col.type_()),
+            })
+            .collect();
+
+        let fetch_limit = limit + 1;
+        let limited_sql = if sql.trim().to_uppercase().starts_with("SELECT")
+            && !sql.to_uppercase().contains(" LIMIT ")
+        {
+            format!("{} LIMIT {}", sql.trim_end_matches(';'), fetch_limit)
+        } else {
+            sql.to_string()
+        };
+
         let rows = client
-            .query(sql, &[])
+            .query(&limited_sql, &[])
             .await
             .map_err(|e| AppError::Validation(format!("Query execution failed: {}", e)))?;
 
         let execution_time_ms = start.elapsed().as_secs_f64() * 1000.0;
-
-        // Get column info from the first row or empty if no rows
-        let columns: Vec<ColumnInfo> = if rows.is_empty() {
-            // Try to get column info by preparing the statement
-            let stmt = client
-                .prepare(sql)
-                .await
-                .map_err(|e| AppError::Internal(format!("Failed to prepare statement: {}", e)))?;
-
-            stmt.columns()
-                .iter()
-                .map(|col| ColumnInfo {
-                    name: col.name().to_string(),
-                    data_type: type_to_string(col.type_()),
-                })
-                .collect()
-        } else {
-            rows[0]
-                .columns()
-                .iter()
-                .map(|col| ColumnInfo {
-                    name: col.name().to_string(),
-                    data_type: type_to_string(col.type_()),
-                })
-                .collect()
-        };
 
         let total_rows = rows.len() as i64;
         let truncated = total_rows > limit as i64;

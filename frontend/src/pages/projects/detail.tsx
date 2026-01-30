@@ -311,7 +311,7 @@ export function ProjectDetailPage() {
     queryKey: ["databases", id],
     queryFn: () => (id ? databasesApi.list(id) : Promise.reject()),
     enabled: !!id,
-    refetchInterval: 5000, // Keep database statuses fresh
+    refetchInterval: 30000,
   });
 
   const { data: postgresVersionsData } = useQuery({
@@ -389,13 +389,22 @@ export function ProjectDetailPage() {
 
   const groupedDatabases = React.useMemo(() => {
     const mainDatabases = databases.filter((d) => d.branch?.is_default || !d.branch?.parent_id);
-    const branchDatabases = databases.filter((d) => d.branch?.parent_id && !d.branch?.is_default);
+
+    const branchMap = new Map<string, DatabaseResponse[]>();
+    for (const db of databases) {
+      const parentId = db.branch?.parent_id;
+      if (parentId && !db.branch?.is_default) {
+        const existing = branchMap.get(parentId) || [];
+        existing.push(db);
+        branchMap.set(parentId, existing);
+      }
+    }
 
     return mainDatabases.map((main) => ({
       main,
-      branches: branchDatabases
-        .filter((b) => b.branch?.parent_id === main.id)
-        .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()),
+      branches: (branchMap.get(main.id) || []).sort(
+        (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+      ),
     }));
   }, [databases]);
 

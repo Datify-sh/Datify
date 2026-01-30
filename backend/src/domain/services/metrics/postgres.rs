@@ -1,11 +1,15 @@
+use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use aes_gcm::{
     aead::{Aead, KeyInit},
     Aes256Gcm, Nonce,
 };
 use chrono::Utc;
-use tokio_postgres::{Client, NoTls};
+use deadpool_postgres::{ManagerConfig, Pool, RecyclingMethod};
+use tokio::sync::RwLock;
+use tokio_postgres::NoTls;
 
 use crate::domain::models::{
     ConnectionMetrics, Database, DatabaseMetrics, QueryMetrics, ResourceMetrics, RowMetrics,
@@ -14,15 +18,34 @@ use crate::domain::models::{
 use crate::error::{AppError, AppResult};
 use crate::infrastructure::docker::ContainerStats;
 
+const POOL_MAX_SIZE: usize = 2;
+const POOL_TIMEOUT_SECS: u64 = 10;
+const POOL_CACHE_TTL_SECS: u64 = 300;
+
+struct CachedPool {
+    pool: Pool,
+    last_used: Instant,
+}
+
 pub struct PostgresMetricsCollector {
     encryption_key: Arc<[u8; 32]>,
+    pools: Arc<RwLock<HashMap<String, CachedPool>>>,
 }
 
 impl PostgresMetricsCollector {
     pub fn new(encryption_key: [u8; 32]) -> Self {
         Self {
             encryption_key: Arc::new(encryption_key),
+            pools: Arc::new(RwLock::new(HashMap::new())),
         }
+    }
+
+    pub async fn cleanup_stale_pools(&self) {
+        let mut pools = self.pools.write().await;
+        let now = Instant::now();
+        pools.retain(|_, cached| {
+            now.duration_since(cached.last_used) < Duration::from_secs(POOL_CACHE_TTL_SECS)
+        });
     }
 
     fn decrypt_password(&self, encrypted: &str) -> AppResult<String> {
@@ -47,7 +70,34 @@ impl PostgresMetricsCollector {
             .map_err(|e| AppError::Internal(format!("Invalid UTF-8 in password: {}", e)))
     }
 
-    async fn connect_to_database(&self, database: &Database) -> AppResult<Client> {
+    async fn get_pool(&self, database: &Database) -> AppResult<Pool> {
+        let db_id = &database.id;
+
+        {
+            let mut pools = self.pools.write().await;
+            if let Some(cached) = pools.get_mut(db_id) {
+                cached.last_used = Instant::now();
+                return Ok(cached.pool.clone());
+            }
+        }
+
+        let pool = self.create_pool(database).await?;
+
+        {
+            let mut pools = self.pools.write().await;
+            pools.insert(
+                db_id.clone(),
+                CachedPool {
+                    pool: pool.clone(),
+                    last_used: Instant::now(),
+                },
+            );
+        }
+
+        Ok(pool)
+    }
+
+    async fn create_pool(&self, database: &Database) -> AppResult<Pool> {
         let encrypted = database
             .password_encrypted
             .as_ref()
@@ -55,28 +105,39 @@ impl PostgresMetricsCollector {
 
         let password = self.decrypt_password(encrypted)?;
         let container_name = database.container_name();
-        let connection_string = format!(
-            "host={} port=5432 user={} password={} dbname=postgres connect_timeout=10",
-            container_name, database.username, password
-        );
 
-        let (client, connection) = tokio_postgres::connect(&connection_string, NoTls)
-            .await
-            .map_err(|e| {
-                tracing::error!("PostgreSQL connection failed to {}: {}", container_name, e);
-                AppError::Internal(format!("Failed to connect to database: {}", e))
-            })?;
-
-        tokio::spawn(async move {
-            if let Err(e) = connection.await {
-                tracing::error!("Database connection error: {}", e);
-            }
+        let mut cfg = deadpool_postgres::Config::new();
+        cfg.host = Some(container_name.clone());
+        cfg.port = Some(5432);
+        cfg.user = Some(database.username.clone());
+        cfg.password = Some(password);
+        cfg.dbname = Some("postgres".to_string());
+        cfg.connect_timeout = Some(Duration::from_secs(POOL_TIMEOUT_SECS));
+        cfg.manager = Some(ManagerConfig {
+            recycling_method: RecyclingMethod::Fast,
         });
 
-        Ok(client)
+        let pool = cfg
+            .create_pool(Some(deadpool_postgres::Runtime::Tokio1), NoTls)
+            .map_err(|e| AppError::Internal(format!("Failed to create pool: {}", e)))?;
+
+        pool.resize(POOL_MAX_SIZE);
+
+        Ok(pool)
     }
 
-    async fn detect_pg_stat_statements_version(&self, client: &Client) -> Option<String> {
+    async fn get_client(&self, database: &Database) -> AppResult<deadpool_postgres::Client> {
+        let pool = self.get_pool(database).await?;
+        pool.get().await.map_err(|e| {
+            tracing::error!("Failed to get connection from pool: {}", e);
+            AppError::Internal(format!("Failed to get database connection: {}", e))
+        })
+    }
+
+    async fn detect_pg_stat_statements_version(
+        &self,
+        client: &deadpool_postgres::Client,
+    ) -> Option<String> {
         let row = client
             .query_one(
                 "SELECT extversion FROM pg_extension WHERE extname = 'pg_stat_statements'",
@@ -107,7 +168,7 @@ impl PostgresMetricsCollector {
         }
     }
 
-    async fn collect_pg_metrics(&self, client: &Client) -> PgMetrics {
+    async fn collect_pg_metrics(&self, client: &deadpool_postgres::Client) -> PgMetrics {
         let mut metrics = PgMetrics::default();
 
         if let Ok(row) = client
@@ -248,10 +309,10 @@ impl PostgresMetricsCollector {
         database: &Database,
         docker_stats: &ContainerStats,
     ) -> AppResult<UnifiedMetrics> {
-        let pg_metrics = match self.connect_to_database(database).await {
+        let pg_metrics = match self.get_client(database).await {
             Ok(client) => self.collect_pg_metrics(&client).await,
             Err(e) => {
-                tracing::warn!("Failed to connect to database for metrics: {}", e);
+                tracing::warn!("Failed to get connection for metrics: {}", e);
                 PgMetrics::default()
             },
         };
@@ -291,7 +352,7 @@ impl PostgresMetricsCollector {
         limit: i32,
         sort_by: &str,
     ) -> AppResult<Vec<crate::domain::models::QueryLogEntry>> {
-        let client = self.connect_to_database(database).await?;
+        let client = self.get_client(database).await?;
 
         let extension_exists = client
             .query_one(
@@ -378,7 +439,7 @@ impl PostgresMetricsCollector {
     }
 
     pub async fn count_query_logs(&self, database: &Database) -> AppResult<i64> {
-        let client = self.connect_to_database(database).await?;
+        let client = self.get_client(database).await?;
 
         let count_row = client
             .query_one(

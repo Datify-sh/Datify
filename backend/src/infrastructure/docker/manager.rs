@@ -20,7 +20,7 @@ use super::containers::{ContainerConfig, PostgresContainer, RedisContainer, Valk
 use crate::config::Settings;
 use crate::error::{AppError, AppResult};
 
-const MAX_LOG_LINES: usize = 10_000;
+const MAX_LOG_LINES: usize = 1_000;
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct ImagePullProgress {

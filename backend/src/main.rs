@@ -7,6 +7,8 @@ use datify::infrastructure::docker::DockerManager;
 use datify::{spawn_metrics_collector, MetricsService, Repositories};
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use tokio::net::TcpListener;
+use tokio::signal;
+use tokio_util::sync::CancellationToken;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 #[tokio::main]
@@ -49,8 +51,14 @@ async fn main() -> anyhow::Result<()> {
         &settings.security.encryption_key,
     ));
 
-    let _metrics_collector =
-        spawn_metrics_collector(metrics_service, repositories.databases.clone(), 15);
+    let shutdown_token = CancellationToken::new();
+
+    let _metrics_collector = spawn_metrics_collector(
+        metrics_service,
+        repositories.databases.clone(),
+        15,
+        shutdown_token.clone(),
+    );
     tracing::info!("Background metrics collector started");
 
     let app = datify::create_router(db_pool, docker, settings.clone()).await;
@@ -68,6 +76,7 @@ async fn main() -> anyhow::Result<()> {
         listener,
         app.into_make_service_with_connect_info::<SocketAddr>(),
     )
+    .with_graceful_shutdown(shutdown_signal(shutdown_token))
     .await?;
 
     Ok(())
@@ -110,4 +119,31 @@ async fn init_database(settings: &Settings) -> anyhow::Result<sqlx::SqlitePool> 
         .await?;
 
     Ok(pool)
+}
+
+async fn shutdown_signal(cancel_token: CancellationToken) {
+    let ctrl_c = async {
+        signal::ctrl_c()
+            .await
+            .expect("Failed to install Ctrl+C handler");
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        signal::unix::signal(signal::unix::SignalKind::terminate())
+            .expect("Failed to install signal handler")
+            .recv()
+            .await;
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => {},
+        _ = terminate => {},
+    }
+
+    tracing::info!("Shutdown signal received, starting graceful shutdown");
+    cancel_token.cancel();
 }

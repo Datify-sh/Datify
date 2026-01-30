@@ -30,15 +30,18 @@ export function useMetricsStream(
   const wsRef = React.useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectAttemptsRef = React.useRef(0);
+  const isMountedRef = React.useRef(true);
 
   React.useEffect(() => {
     if (!enabled || !databaseId) {
       return;
     }
 
+    isMountedRef.current = true;
     reconnectAttemptsRef.current = 0;
 
     const connect = () => {
+      if (!isMountedRef.current) return;
       setIsConnecting(true);
       setError(null);
 
@@ -47,6 +50,7 @@ export function useMetricsStream(
       wsRef.current = ws;
 
       ws.onopen = () => {
+        if (!isMountedRef.current) return;
         setIsConnected(true);
         setIsConnecting(false);
         setError(null);
@@ -54,6 +58,7 @@ export function useMetricsStream(
       };
 
       ws.onmessage = (event) => {
+        if (!isMountedRef.current) return;
         try {
           const data = JSON.parse(event.data) as MetricsStreamMessage;
 
@@ -68,12 +73,14 @@ export function useMetricsStream(
       };
 
       ws.onerror = () => {
+        if (!isMountedRef.current) return;
         setError("Connection error");
         setIsConnected(false);
         setIsConnecting(false);
       };
 
       ws.onclose = () => {
+        if (!isMountedRef.current) return;
         setIsConnected(false);
         setIsConnecting(false);
 
@@ -90,6 +97,7 @@ export function useMetricsStream(
     connect();
 
     return () => {
+      isMountedRef.current = false;
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
       }

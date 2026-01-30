@@ -2,6 +2,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use tokio::time;
+use tokio_util::sync::CancellationToken;
 
 use crate::domain::services::MetricsService;
 use crate::repositories::DatabaseRepository;
@@ -10,6 +11,7 @@ pub struct MetricsCollector {
     metrics_service: Arc<MetricsService>,
     database_repo: DatabaseRepository,
     interval: Duration,
+    cancel_token: CancellationToken,
 }
 
 impl MetricsCollector {
@@ -17,11 +19,13 @@ impl MetricsCollector {
         metrics_service: Arc<MetricsService>,
         database_repo: DatabaseRepository,
         interval_secs: u64,
+        cancel_token: CancellationToken,
     ) -> Self {
         Self {
             metrics_service,
             database_repo,
             interval: Duration::from_secs(interval_secs),
+            cancel_token,
         }
     }
 
@@ -34,10 +38,16 @@ impl MetricsCollector {
         let mut interval = time::interval(self.interval);
 
         loop {
-            interval.tick().await;
-
-            if let Err(e) = self.collect_all_metrics().await {
-                tracing::error!("Error collecting metrics: {}", e);
+            tokio::select! {
+                _ = self.cancel_token.cancelled() => {
+                    tracing::info!("Metrics collector shutting down");
+                    break;
+                }
+                _ = interval.tick() => {
+                    if let Err(e) = self.collect_all_metrics().await {
+                        tracing::error!("Error collecting metrics: {}", e);
+                    }
+                }
             }
         }
     }
@@ -57,6 +67,9 @@ impl MetricsCollector {
         tracing::debug!("Collecting metrics for {} running databases", count);
 
         for database in databases {
+            if self.cancel_token.is_cancelled() {
+                break;
+            }
             if let Err(e) = self.metrics_service.snapshot_metrics(&database.id).await {
                 tracing::warn!(
                     "Failed to collect metrics for database {}: {}",
@@ -74,8 +87,10 @@ pub fn spawn_metrics_collector(
     metrics_service: Arc<MetricsService>,
     database_repo: DatabaseRepository,
     interval_secs: u64,
+    cancel_token: CancellationToken,
 ) -> tokio::task::JoinHandle<()> {
-    let collector = MetricsCollector::new(metrics_service, database_repo, interval_secs);
+    let collector =
+        MetricsCollector::new(metrics_service, database_repo, interval_secs, cancel_token);
 
     tokio::spawn(async move {
         collector.run().await;

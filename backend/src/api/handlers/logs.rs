@@ -142,6 +142,8 @@ pub async fn stream_database_logs(
     Ok(ws.on_upgrade(move |socket| handle_log_stream(socket, state, container_id, tail)))
 }
 
+const MAX_PENDING_MESSAGES: usize = 100;
+
 async fn handle_log_stream(socket: WebSocket, state: LogsState, container_id: String, tail: i64) {
     let (mut sender, mut receiver) = socket.split();
 
@@ -161,6 +163,8 @@ async fn handle_log_stream(socket: WebSocket, state: LogsState, container_id: St
     let mut log_stream = std::pin::pin!(log_stream);
 
     let mut heartbeat = tokio::time::interval(std::time::Duration::from_secs(30));
+    let mut pending_messages: std::collections::VecDeque<String> =
+        std::collections::VecDeque::with_capacity(MAX_PENDING_MESSAGES);
 
     loop {
         tokio::select! {
@@ -187,8 +191,20 @@ async fn handle_log_stream(socket: WebSocket, state: LogsState, container_id: St
                             message: entry.message,
                         });
                         let json = serde_json::to_string(&msg).unwrap();
-                        if sender.send(Message::Text(json.into())).await.is_err() {
-                            break;
+
+                        if pending_messages.len() >= MAX_PENDING_MESSAGES {
+                            pending_messages.pop_front();
+                        }
+                        pending_messages.push_back(json);
+
+                        while let Some(queued) = pending_messages.pop_front() {
+                            match sender.send(Message::Text(queued.clone().into())).await {
+                                Ok(_) => {},
+                                Err(_) => {
+                                    pending_messages.push_front(queued);
+                                    break;
+                                }
+                            }
                         }
                     }
                     Err(e) => {
