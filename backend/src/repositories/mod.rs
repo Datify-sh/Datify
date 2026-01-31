@@ -1,11 +1,11 @@
-mod api_key;
+mod audit_log;
 mod database;
 mod metrics;
 mod project;
 mod token;
 mod user;
 
-pub use api_key::ApiKeyRepository;
+pub use audit_log::AuditLogRepository;
 pub use database::DatabaseRepository;
 pub use metrics::MetricsRepository;
 pub use project::ProjectRepository;
@@ -18,9 +18,9 @@ pub struct Repositories {
     pub users: UserRepository,
     pub projects: ProjectRepository,
     pub databases: DatabaseRepository,
-    pub api_keys: ApiKeyRepository,
     pub metrics: MetricsRepository,
     pub tokens: TokenRepository,
+    pub audit_logs: AuditLogRepository,
 }
 
 impl Repositories {
@@ -29,9 +29,9 @@ impl Repositories {
             users: UserRepository::new(pool.clone()),
             projects: ProjectRepository::new(pool.clone()),
             databases: DatabaseRepository::new(pool.clone()),
-            api_keys: ApiKeyRepository::new(pool.clone()),
             metrics: MetricsRepository::new(pool.clone()),
-            tokens: TokenRepository::new(pool),
+            tokens: TokenRepository::new(pool.clone()),
+            audit_logs: AuditLogRepository::new(pool),
         }
     }
 }

@@ -1,4 +1,4 @@
-mod api_key;
+mod audit_log;
 mod database;
 mod logs;
 mod metrics;
@@ -6,7 +6,7 @@ mod project;
 mod sql;
 mod user;
 
-pub use api_key::*;
+pub use audit_log::*;
 pub use database::*;
 pub use logs::*;
 pub use metrics::*;
