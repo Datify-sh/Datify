@@ -112,14 +112,14 @@ function AuditLogRow({ log }: { log: AuditLogResponse }) {
       <TableCell>
         <StatusBadge status={log.status} />
       </TableCell>
-      <TableCell className="text-muted-foreground text-xs font-mono">{log.ip_address || "-"}</TableCell>
+      <TableCell className="text-muted-foreground text-xs font-mono">
+        {log.ip_address || "-"}
+      </TableCell>
     </TableRow>
   );
 }
 
-type PageItem =
-  | { type: "page"; value: number }
-  | { type: "ellipsis"; key: string };
+type PageItem = { type: "page"; value: number } | { type: "ellipsis"; key: string };
 
 function buildPagination(currentPage: number, totalPages: number): PageItem[] {
   if (totalPages <= 1) return [{ type: "page", value: 1 }];
@@ -178,10 +178,7 @@ export function AuditLogsPage() {
   const totalPages = Math.max(1, pagination?.total_pages ?? 1);
   const errorMessage = isError ? getErrorMessage(error, "Failed to load audit logs") : "";
   const isRefreshing = isFetching && !isLoading;
-  const pageItems = React.useMemo(
-    () => buildPagination(page, totalPages),
-    [page, totalPages],
-  );
+  const pageItems = React.useMemo(() => buildPagination(page, totalPages), [page, totalPages]);
 
   React.useEffect(() => {
     if (pagination && page > totalPages) {
@@ -293,12 +290,24 @@ export function AuditLogsPage() {
               <TableBody>
                 {Array.from({ length: 10 }).map((_, i) => (
                   <TableRow key={i}>
-                    <TableCell><Skeleton className="h-4 w-24" /></TableCell>
-                    <TableCell><Skeleton className="h-8 w-32" /></TableCell>
-                    <TableCell><Skeleton className="h-5 w-24" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-20" /></TableCell>
-                    <TableCell><Skeleton className="h-5 w-16" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-28" /></TableCell>
+                    <TableCell>
+                      <Skeleton className="h-4 w-24" />
+                    </TableCell>
+                    <TableCell>
+                      <Skeleton className="h-8 w-32" />
+                    </TableCell>
+                    <TableCell>
+                      <Skeleton className="h-5 w-24" />
+                    </TableCell>
+                    <TableCell>
+                      <Skeleton className="h-4 w-20" />
+                    </TableCell>
+                    <TableCell>
+                      <Skeleton className="h-5 w-16" />
+                    </TableCell>
+                    <TableCell>
+                      <Skeleton className="h-4 w-28" />
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>

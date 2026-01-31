@@ -122,10 +122,9 @@ async fn init_database(settings: &Settings) -> anyhow::Result<sqlx::SqlitePool> 
                 let key_pragma = format!("PRAGMA key = \"x'{}'\"", db_key);
                 sqlx::query(&key_pragma).execute(&mut *conn).await?;
 
-                let cipher_version: Option<String> =
-                    sqlx::query_scalar("PRAGMA cipher_version;")
-                        .fetch_optional(&mut *conn)
-                        .await?;
+                let cipher_version: Option<String> = sqlx::query_scalar("PRAGMA cipher_version;")
+                    .fetch_optional(&mut *conn)
+                    .await?;
                 if cipher_version.as_deref().unwrap_or("").is_empty() {
                     return Err(sqlx::Error::Protocol(
                         "SQLCipher is required but not available".into(),

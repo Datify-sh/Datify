@@ -2,9 +2,9 @@ use std::sync::Arc;
 
 use axum::http::{header, HeaderValue, Method};
 use axum::{
-    middleware, Extension,
+    middleware,
     routing::{get, post},
-    Router,
+    Extension, Router,
 };
 use sqlx::sqlite::SqlitePool;
 use tower_http::cors::CorsLayer;

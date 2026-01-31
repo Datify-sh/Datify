@@ -443,9 +443,7 @@ impl Settings {
             ));
         }
         if hex::decode(&self.security.encryption_key).is_err() {
-            return Err(ConfigError(
-                "Encryption key must be valid hex".to_string(),
-            ));
+            return Err(ConfigError("Encryption key must be valid hex".to_string()));
         }
 
         Ok(())

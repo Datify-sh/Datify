@@ -7,10 +7,10 @@ use axum::{
 };
 
 use crate::api::extractors::AuthUser;
+use crate::domain::models::{AuditAction, AuditEntityType, AuditStatus};
 use crate::domain::models::{
     ExecuteQueryRequest, QueryResult, SchemaInfo, TablePreview, TablePreviewQuery,
 };
-use crate::domain::models::{AuditAction, AuditEntityType, AuditStatus};
 use crate::domain::services::{AuditLogService, SqlService};
 use crate::error::{AppError, AppResult};
 

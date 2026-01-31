@@ -14,6 +14,7 @@ impl AuditLogService {
         Self { audit_log_repo }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn log(
         &self,
         user_id: String,

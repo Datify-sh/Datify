@@ -190,7 +190,11 @@ pub struct AuditLogResponse {
 }
 
 impl AuditLog {
-    pub fn to_response(self, user_email: Option<String>, user_name: Option<String>) -> AuditLogResponse {
+    pub fn to_response(
+        self,
+        user_email: Option<String>,
+        user_name: Option<String>,
+    ) -> AuditLogResponse {
         let changes = self
             .changes
             .as_ref()
