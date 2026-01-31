@@ -920,6 +920,35 @@ export function DatabaseDetailPage() {
     },
   });
 
+  const restartMutation = useMutation({
+    mutationFn: async () => {
+      if (!id) {
+        throw new Error("Database ID is required");
+      }
+      if (database?.status === "running") {
+        await databasesApi.stop(id);
+      }
+      return databasesApi.start(id);
+    },
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: ["database", id] });
+      queryClient.setQueryData(["database", id], (old: typeof database) => {
+        if (!old) return old;
+        return { ...old, status: old.status === "running" ? "stopping" : "starting" };
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["database", id] });
+      queryClient.invalidateQueries({ queryKey: ["databases", database?.project_id] });
+      queryClient.invalidateQueries({ queryKey: ["all-databases-for-stats"] });
+      toast.success("Database restarting...");
+    },
+    onError: (err) => {
+      queryClient.invalidateQueries({ queryKey: ["database", id] });
+      toast.error(getErrorMessage(err, "Failed to restart database"));
+    },
+  });
+
   const deleteMutation = useMutation({
     mutationFn: () => {
       if (!id) return Promise.reject(new Error("Database ID is required"));
@@ -989,7 +1018,8 @@ export function DatabaseDetailPage() {
 
   const isRunning = database.status === "running";
   const isTransitioning = database.status === "starting" || database.status === "stopping";
-  const isActionLoading = startMutation.isPending || stopMutation.isPending;
+  const isActionLoading =
+    startMutation.isPending || stopMutation.isPending || restartMutation.isPending;
 
   const getStorageUsedBytes = () => {
     if (!realtimeMetrics) return 0;
@@ -1119,6 +1149,18 @@ export function DatabaseDetailPage() {
               Start
             </Button>
           )}
+          <Button
+            variant="outline"
+            onClick={() => restartMutation.mutate()}
+            disabled={!isRunning || isActionLoading || isTransitioning}
+          >
+            {restartMutation.isPending ? (
+              <Spinner className="size-4" />
+            ) : (
+              <HugeiconsIcon icon={RefreshIcon} className="size-4" strokeWidth={2} />
+            )}
+            Restart
+          </Button>
           <AlertDialog>
             <AlertDialogTrigger asChild>
               <Button
