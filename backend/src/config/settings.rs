@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use hex;
 use once_cell::sync::Lazy;
 use serde::Deserialize;
 use tokio::sync::RwLock;
@@ -439,6 +440,11 @@ impl Settings {
         if self.security.encryption_key.len() != 64 {
             return Err(ConfigError(
                 "Encryption key must be 64 hex characters (32 bytes)".to_string(),
+            ));
+        }
+        if hex::decode(&self.security.encryption_key).is_err() {
+            return Err(ConfigError(
+                "Encryption key must be valid hex".to_string(),
             ));
         }
 

@@ -25,6 +25,7 @@ bytes = "1"
 sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite", "postgres", "migrate", "chrono", "uuid"] }
 tokio-postgres = { version = "0.7", features = ["runtime", "with-chrono-0_4"] }
 deadpool-postgres = { version = "0.14", features = ["rt_tokio_1"] }
+libsqlite3-sys = { version = "0.30.1", features = ["bundled-sqlcipher-vendored-openssl"] }
 
 bollard = "0.20"
 

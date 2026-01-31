@@ -103,19 +103,53 @@ async fn init_database(settings: &Settings) -> anyhow::Result<sqlx::SqlitePool> 
     let connect_options: SqliteConnectOptions = settings.database.url.parse()?;
     let connect_options = connect_options
         .create_if_missing(true)
-        .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal)
-        .synchronous(sqlx::sqlite::SqliteSynchronous::Normal)
         .busy_timeout(Duration::from_secs(30));
 
+    let db_key = settings.security.encryption_key.clone();
     let pool = SqlitePoolOptions::new()
         .max_connections(settings.database.max_connections)
         .min_connections(settings.database.min_connections)
         .acquire_timeout(Duration::from_secs(30))
-        .connect_with(connect_options)
-        .await?;
+        .after_connect(move |conn, _meta| {
+            let db_key = db_key.clone();
+            Box::pin(async move {
+                if db_key.is_empty() {
+                    return Err(sqlx::Error::Protocol(
+                        "ENCRYPTION_KEY must be set for SQLCipher".into(),
+                    ));
+                }
 
-    sqlx::query("PRAGMA foreign_keys = ON")
-        .execute(&pool)
+                let key_pragma = format!("PRAGMA key = \"x'{}'\"", db_key);
+                sqlx::query(&key_pragma).execute(&mut *conn).await?;
+
+                let cipher_version: Option<String> =
+                    sqlx::query_scalar("PRAGMA cipher_version;")
+                        .fetch_optional(&mut *conn)
+                        .await?;
+                if cipher_version.as_deref().unwrap_or("").is_empty() {
+                    return Err(sqlx::Error::Protocol(
+                        "SQLCipher is required but not available".into(),
+                    ));
+                }
+
+                sqlx::query_scalar::<_, i64>("SELECT count(*) FROM sqlite_master")
+                    .fetch_one(&mut *conn)
+                    .await?;
+
+                sqlx::query("PRAGMA journal_mode = WAL")
+                    .execute(&mut *conn)
+                    .await?;
+                sqlx::query("PRAGMA synchronous = NORMAL")
+                    .execute(&mut *conn)
+                    .await?;
+                sqlx::query("PRAGMA foreign_keys = ON")
+                    .execute(&mut *conn)
+                    .await?;
+
+                Ok(())
+            })
+        })
+        .connect_with(connect_options)
         .await?;
 
     Ok(pool)
