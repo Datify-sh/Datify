@@ -136,6 +136,31 @@ export interface DatabaseResponse {
   branch: BranchInfo;
 }
 
+export type ConfigFormat = "file" | "kv";
+export type ConfigSource = "file" | "runtime" | "empty";
+
+export interface DatabaseConfigResponse {
+  database_id: string;
+  database_type: DatabaseType;
+  format: ConfigFormat;
+  source: ConfigSource;
+  content: string;
+  warnings: string[];
+  requires_restart: boolean;
+}
+
+export interface UpdateDatabaseConfigRequest {
+  content: string;
+}
+
+export interface UpdateDatabaseConfigResponse {
+  database_id: string;
+  database_type: DatabaseType;
+  applied: boolean;
+  warnings: string[];
+  requires_restart: boolean;
+}
+
 export interface BranchResponse {
   id: string;
   name: string;

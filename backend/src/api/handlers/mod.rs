@@ -1,5 +1,6 @@
 mod audit_logs;
 mod auth;
+mod config;
 mod databases;
 mod health;
 mod logs;
@@ -11,6 +12,7 @@ mod terminal;
 
 pub use audit_logs::*;
 pub use auth::*;
+pub use config::*;
 pub use databases::*;
 pub use health::*;
 pub use logs::*;

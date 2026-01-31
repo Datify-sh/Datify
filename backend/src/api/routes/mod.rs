@@ -168,6 +168,10 @@ pub async fn create_router(
             post(handlers::change_database_password),
         )
         .route(
+            "/{id}/config",
+            get(handlers::get_database_config).put(handlers::update_database_config),
+        )
+        .route(
             "/{id}/branches",
             get(handlers::list_branches).post(handlers::create_branch),
         )

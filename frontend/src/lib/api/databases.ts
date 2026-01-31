@@ -4,6 +4,7 @@ import type {
   ChangePasswordRequest,
   CreateBranchRequest,
   CreateDatabaseRequest,
+  DatabaseConfigResponse,
   DatabaseResponse,
   ExecuteQueryRequest,
   LogsResponse,
@@ -15,6 +16,8 @@ import type {
   TablePreview,
   TimeRange,
   UnifiedMetricsResponse,
+  UpdateDatabaseConfigRequest,
+  UpdateDatabaseConfigResponse,
   UpdateDatabaseRequest,
 } from "./types";
 
@@ -108,6 +111,11 @@ export const databasesApi = {
 
   syncFromParent: (id: string) =>
     apiClient.post<DatabaseResponse>(`/databases/${id}/sync-from-parent`),
+
+  getConfig: (id: string) => apiClient.get<DatabaseConfigResponse>(`/databases/${id}/config`),
+
+  updateConfig: (id: string, data: UpdateDatabaseConfigRequest) =>
+    apiClient.put<UpdateDatabaseConfigResponse>(`/databases/${id}/config`, data),
 
   // SQL Editor endpoints
   getSchema: (id: string) => apiClient.get<SchemaInfo>(`/databases/${id}/schema`),

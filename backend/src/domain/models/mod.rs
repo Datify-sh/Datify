@@ -1,4 +1,5 @@
 mod audit_log;
+mod config;
 mod database;
 mod logs;
 mod metrics;
@@ -7,6 +8,7 @@ mod sql;
 mod user;
 
 pub use audit_log::*;
+pub use config::*;
 pub use database::*;
 pub use logs::*;
 pub use metrics::*;

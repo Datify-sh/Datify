@@ -4,14 +4,18 @@ use aes_gcm::{
     aead::{Aead, KeyInit},
     Aes256Gcm, Nonce,
 };
+use base64::{engine::general_purpose, Engine as _};
 use rand::RngCore;
 
 use crate::domain::models::{
-    BranchResponse, Database, DatabaseResponse, PostgresVersion, RedisVersion, ValkeyVersion,
+    BranchResponse, ConfigFormat, ConfigSource, Database, DatabaseConfigResponse, DatabaseResponse,
+    PostgresVersion, RedisVersion, UpdateDatabaseConfigResponse, ValkeyVersion,
 };
 use crate::error::{AppError, AppResult};
 use crate::infrastructure::docker::{ContainerConfig, DockerManager};
 use crate::repositories::{DatabaseRepository, ProjectRepository};
+
+const KV_SENSITIVE_KEYS: &[&str] = &["requirepass", "masterauth"];
 
 #[derive(Clone)]
 pub struct DatabaseService {
@@ -925,6 +929,534 @@ impl DatabaseService {
             .await?
             .ok_or_else(|| AppError::NotFound(format!("Database '{}' not found", database_id)))
     }
+
+    pub async fn get_config(
+        &self,
+        database_id: &str,
+        user_id: &str,
+    ) -> AppResult<DatabaseConfigResponse> {
+        if !self.check_access(database_id, user_id).await? {
+            return Err(AppError::Forbidden);
+        }
+
+        let database = self
+            .database_repo
+            .find_by_id(database_id)
+            .await?
+            .ok_or_else(|| AppError::NotFound(format!("Database '{}' not found", database_id)))?;
+
+        let mut warnings = Vec::new();
+        let mut requires_restart = false;
+
+        let container_id = database
+            .container_id
+            .clone()
+            .ok_or_else(|| AppError::NotFound("Database has no container".to_string()))?;
+        let status = self.docker.get_container_status(&container_id).await?;
+        if status != "running" {
+            return Err(AppError::Conflict(format!(
+                "Container is not running (status: {})",
+                status
+            )));
+        }
+
+        let (format, source, content) = match database.database_type.as_str() {
+            "postgres" => {
+                requires_restart = true;
+                let password = database
+                    .password_encrypted
+                    .as_ref()
+                    .and_then(|p| self.decrypt_password(p).ok())
+                    .ok_or_else(|| {
+                        AppError::Internal("No password stored for database".to_string())
+                    })?;
+                let config_path = self
+                    .get_postgres_config_path(&container_id, &database.username, &password)
+                    .await?;
+                let content = self
+                    .read_file_from_container(&container_id, &config_path)
+                    .await?;
+                (ConfigFormat::File, ConfigSource::File, content)
+            },
+            "redis" | "valkey" => {
+                let password = database
+                    .password_encrypted
+                    .as_ref()
+                    .and_then(|p| self.decrypt_password(p).ok())
+                    .ok_or_else(|| {
+                        AppError::Internal("No password stored for database".to_string())
+                    })?;
+                let content = self
+                    .fetch_kv_config_from_container(
+                        &container_id,
+                        database.database_type.as_str(),
+                        &password,
+                        &mut warnings,
+                    )
+                    .await?;
+                (ConfigFormat::Kv, ConfigSource::Runtime, content)
+            },
+            _ => {
+                return Err(AppError::Validation(
+                    "Unsupported database type for config".to_string(),
+                ));
+            },
+        };
+
+        Ok(DatabaseConfigResponse {
+            database_id: database.id,
+            database_type: database.database_type,
+            format,
+            source,
+            content,
+            warnings,
+            requires_restart,
+        })
+    }
+
+    pub async fn update_config(
+        &self,
+        database_id: &str,
+        user_id: &str,
+        content: &str,
+    ) -> AppResult<UpdateDatabaseConfigResponse> {
+        if !self.check_access(database_id, user_id).await? {
+            return Err(AppError::Forbidden);
+        }
+
+        let database = self
+            .database_repo
+            .find_by_id(database_id)
+            .await?
+            .ok_or_else(|| AppError::NotFound(format!("Database '{}' not found", database_id)))?;
+
+        let mut warnings = Vec::new();
+        let mut requires_restart = false;
+
+        let container_id = database
+            .container_id
+            .as_ref()
+            .ok_or_else(|| AppError::NotFound("Database has no container".to_string()))?;
+        let status = self.docker.get_container_status(container_id).await?;
+        if status != "running" {
+            return Err(AppError::Conflict(format!(
+                "Container is not running (status: {})",
+                status
+            )));
+        }
+
+        let applied = match database.database_type.as_str() {
+            "postgres" => {
+                requires_restart = true;
+                let password = database
+                    .password_encrypted
+                    .as_ref()
+                    .and_then(|p| self.decrypt_password(p).ok())
+                    .ok_or_else(|| {
+                        AppError::Internal("No password stored for database".to_string())
+                    })?;
+                let config_path = self
+                    .get_postgres_config_path(container_id, &database.username, &password)
+                    .await?;
+                self.write_file_in_container(container_id, &config_path, content)
+                    .await?;
+                let output = self
+                    .reload_postgres_config(container_id, &database.username, &password)
+                    .await?;
+                if !output {
+                    warnings.push("Config saved, but reload did not report success.".to_string());
+                }
+                output
+            },
+            "redis" | "valkey" => {
+                let password = database
+                    .password_encrypted
+                    .as_ref()
+                    .and_then(|p| self.decrypt_password(p).ok())
+                    .ok_or_else(|| {
+                        AppError::Internal("No password stored for database".to_string())
+                    })?;
+                self.apply_kv_config(
+                    container_id,
+                    database.database_type.as_str(),
+                    &password,
+                    content,
+                    &mut warnings,
+                )
+                .await?;
+                let rewritten = self
+                    .rewrite_kv_config(container_id, database.database_type.as_str(), &password)
+                    .await?;
+                if !rewritten {
+                    warnings.push(
+                        "CONFIG REWRITE did not succeed. Changes may not persist after restart."
+                            .to_string(),
+                    );
+                }
+                true
+            },
+            _ => {
+                return Err(AppError::Validation(
+                    "Unsupported database type for config".to_string(),
+                ));
+            },
+        };
+
+        Ok(UpdateDatabaseConfigResponse {
+            database_id: database.id,
+            database_type: database.database_type,
+            applied,
+            warnings,
+            requires_restart,
+        })
+    }
+
+    async fn reload_postgres_config(
+        &self,
+        container_id: &str,
+        username: &str,
+        password: &str,
+    ) -> AppResult<bool> {
+        let output = self
+            .docker
+            .run_exec(
+                container_id,
+                vec![
+                    "psql".to_string(),
+                    "-U".to_string(),
+                    username.to_string(),
+                    "-d".to_string(),
+                    "postgres".to_string(),
+                    "-t".to_string(),
+                    "-A".to_string(),
+                    "-c".to_string(),
+                    "SELECT pg_reload_conf();".to_string(),
+                ],
+                Some(vec![format!("PGPASSWORD={}", password)]),
+            )
+            .await?;
+
+        if let Some(code) = output.exit_code {
+            if code != 0 {
+                return Err(AppError::Docker(format!(
+                    "Failed to reload PostgreSQL config: {}",
+                    output.stderr.trim()
+                )));
+            }
+        }
+
+        Ok(output.stdout.trim() == "t")
+    }
+
+    async fn read_file_from_container(&self, container_id: &str, path: &str) -> AppResult<String> {
+        let output = self
+            .docker
+            .run_exec(
+                container_id,
+                vec!["cat".to_string(), path.to_string()],
+                None,
+            )
+            .await?;
+
+        if let Some(code) = output.exit_code {
+            if code != 0 {
+                return Err(AppError::Docker(format!(
+                    "Failed to read config file: {}",
+                    output.stderr.trim()
+                )));
+            }
+        }
+
+        Ok(output.stdout)
+    }
+
+    async fn write_file_in_container(
+        &self,
+        container_id: &str,
+        path: &str,
+        content: &str,
+    ) -> AppResult<()> {
+        let encoded = general_purpose::STANDARD.encode(content);
+        let encoded_escaped = Self::shell_escape_single(&encoded);
+        let path_escaped = Self::shell_escape_single(path);
+        let command = format!(
+            "printf '%s' '{}' | base64 -d > '{}'",
+            encoded_escaped, path_escaped
+        );
+
+        let output = self
+            .docker
+            .run_exec(
+                container_id,
+                vec!["sh".to_string(), "-c".to_string(), command],
+                None,
+            )
+            .await?;
+
+        if let Some(code) = output.exit_code {
+            if code != 0 {
+                return Err(AppError::Docker(format!(
+                    "Failed to write config file: {}",
+                    output.stderr.trim()
+                )));
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn get_postgres_config_path(
+        &self,
+        container_id: &str,
+        username: &str,
+        password: &str,
+    ) -> AppResult<String> {
+        let output = self
+            .docker
+            .run_exec(
+                container_id,
+                vec![
+                    "psql".to_string(),
+                    "-U".to_string(),
+                    username.to_string(),
+                    "-d".to_string(),
+                    "postgres".to_string(),
+                    "-t".to_string(),
+                    "-A".to_string(),
+                    "-c".to_string(),
+                    "SHOW config_file;".to_string(),
+                ],
+                Some(vec![format!("PGPASSWORD={}", password)]),
+            )
+            .await?;
+
+        if let Some(code) = output.exit_code {
+            if code != 0 {
+                return Err(AppError::Docker(format!(
+                    "Failed to read PostgreSQL config path: {}",
+                    output.stderr.trim()
+                )));
+            }
+        }
+
+        let path = output.stdout.trim().to_string();
+        if path.is_empty() {
+            return Err(AppError::Docker(
+                "PostgreSQL returned empty config path".to_string(),
+            ));
+        }
+
+        Ok(path)
+    }
+
+    async fn rewrite_kv_config(
+        &self,
+        container_id: &str,
+        database_type: &str,
+        password: &str,
+    ) -> AppResult<bool> {
+        let cli = if database_type == "valkey" {
+            "valkey-cli"
+        } else {
+            "redis-cli"
+        };
+
+        let output = self
+            .docker
+            .run_exec(
+                container_id,
+                vec![
+                    cli.to_string(),
+                    "-a".to_string(),
+                    password.to_string(),
+                    "CONFIG".to_string(),
+                    "REWRITE".to_string(),
+                ],
+                None,
+            )
+            .await?;
+
+        if let Some(code) = output.exit_code {
+            if code != 0 {
+                return Ok(false);
+            }
+        }
+
+        Ok(output.stdout.trim().eq_ignore_ascii_case("ok"))
+    }
+
+    async fn fetch_kv_config_from_container(
+        &self,
+        container_id: &str,
+        database_type: &str,
+        password: &str,
+        warnings: &mut Vec<String>,
+    ) -> AppResult<String> {
+        let cli = if database_type == "valkey" {
+            "valkey-cli"
+        } else {
+            "redis-cli"
+        };
+
+        let output = self
+            .docker
+            .run_exec(
+                container_id,
+                vec![
+                    cli.to_string(),
+                    "-a".to_string(),
+                    password.to_string(),
+                    "--raw".to_string(),
+                    "CONFIG".to_string(),
+                    "GET".to_string(),
+                    "*".to_string(),
+                ],
+                None,
+            )
+            .await?;
+
+        if let Some(code) = output.exit_code {
+            if code != 0 {
+                return Err(AppError::Docker(format!(
+                    "Failed to fetch config: {}",
+                    output.stderr.trim()
+                )));
+            }
+        }
+
+        let lines: Vec<&str> = output.stdout.lines().collect();
+        let mut content = String::new();
+        let mut skipped = Vec::new();
+
+        for pair in lines.chunks(2) {
+            if pair.len() < 2 {
+                continue;
+            }
+            let key = pair[0].trim();
+            let value = pair[1].trim();
+            if key.is_empty() {
+                continue;
+            }
+            if KV_SENSITIVE_KEYS.contains(&key) {
+                skipped.push(key.to_string());
+                continue;
+            }
+            content.push_str(key);
+            if !value.is_empty() {
+                content.push(' ');
+                content.push_str(value);
+            }
+            content.push('\n');
+        }
+
+        if !skipped.is_empty() {
+            warnings.push(format!("Sensitive keys hidden: {}", skipped.join(", ")));
+        }
+
+        Ok(content)
+    }
+
+    async fn apply_kv_config(
+        &self,
+        container_id: &str,
+        database_type: &str,
+        password: &str,
+        content: &str,
+        warnings: &mut Vec<String>,
+    ) -> AppResult<()> {
+        let entries = Self::parse_kv_config(content)?;
+        let cli = if database_type == "valkey" {
+            "valkey-cli"
+        } else {
+            "redis-cli"
+        };
+
+        let mut skipped = Vec::new();
+
+        for entry in entries {
+            if KV_SENSITIVE_KEYS.contains(&entry.key.as_str()) {
+                skipped.push(entry.key);
+                continue;
+            }
+
+            if entry.values.is_empty() {
+                return Err(AppError::Validation(format!(
+                    "Config key '{}' must have a value",
+                    entry.key
+                )));
+            }
+
+            let mut cmd = vec![
+                cli.to_string(),
+                "-a".to_string(),
+                password.to_string(),
+                "CONFIG".to_string(),
+                "SET".to_string(),
+                entry.key.clone(),
+            ];
+            cmd.extend(entry.values.clone());
+
+            let output = self.docker.run_exec(container_id, cmd, None).await?;
+            if let Some(code) = output.exit_code {
+                if code != 0 {
+                    return Err(AppError::Docker(format!(
+                        "Failed to apply config '{}': {}",
+                        entry.key,
+                        output.stderr.trim()
+                    )));
+                }
+            }
+            let response = output.stdout.trim();
+            if !response.eq_ignore_ascii_case("ok") {
+                return Err(AppError::Docker(format!(
+                    "Failed to apply config '{}': {}",
+                    entry.key, response
+                )));
+            }
+        }
+
+        if !skipped.is_empty() {
+            warnings.push(format!("Ignored sensitive keys: {}", skipped.join(", ")));
+        }
+
+        Ok(())
+    }
+
+    fn parse_kv_config(content: &str) -> AppResult<Vec<KvConfigEntry>> {
+        let mut entries = Vec::new();
+
+        for (idx, line) in content.lines().enumerate() {
+            let trimmed = line.trim();
+            if trimmed.is_empty() || trimmed.starts_with('#') || trimmed.starts_with(';') {
+                continue;
+            }
+            let parts: Vec<&str> = trimmed.split_whitespace().collect();
+            if parts.is_empty() {
+                continue;
+            }
+            if parts.len() < 2 {
+                return Err(AppError::Validation(format!(
+                    "Invalid config at line {}: missing value",
+                    idx + 1
+                )));
+            }
+            let key = parts[0].to_string();
+            let values = parts[1..].iter().map(|v| v.to_string()).collect();
+            entries.push(KvConfigEntry { key, values });
+        }
+
+        Ok(entries)
+    }
+
+    fn shell_escape_single(value: &str) -> String {
+        value.replace('\'', "'\"'\"'")
+    }
+}
+
+#[derive(Debug, Clone)]
+struct KvConfigEntry {
+    key: String,
+    values: Vec<String>,
 }
 
 fn generate_password() -> String {

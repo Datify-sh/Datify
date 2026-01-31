@@ -63,6 +63,13 @@ pub struct ContainerLogs {
     pub has_more: bool,
 }
 
+#[derive(Debug, Clone)]
+pub struct ExecOutput {
+    pub stdout: String,
+    pub stderr: String,
+    pub exit_code: Option<i64>,
+}
+
 #[derive(Clone)]
 pub struct DockerManager {
     docker: Arc<Docker>,
@@ -592,6 +599,77 @@ impl DockerManager {
             .await
             .map_err(|e| AppError::Docker(format!("Failed to resize exec: {}", e)))?;
         Ok(())
+    }
+
+    pub async fn run_exec(
+        &self,
+        container_id: &str,
+        cmd: Vec<String>,
+        env: Option<Vec<String>>,
+    ) -> AppResult<ExecOutput> {
+        let config = ExecConfig {
+            attach_stdin: Some(false),
+            attach_stdout: Some(true),
+            attach_stderr: Some(true),
+            tty: Some(false),
+            cmd: Some(cmd),
+            env,
+            ..Default::default()
+        };
+
+        let exec = self
+            .docker
+            .create_exec(container_id, config)
+            .await
+            .map_err(|e| AppError::Docker(format!("Failed to create exec: {}", e)))?;
+
+        let output = self
+            .docker
+            .start_exec(&exec.id, None)
+            .await
+            .map_err(|e| AppError::Docker(format!("Failed to start exec: {}", e)))?;
+
+        let mut stdout = String::new();
+        let mut stderr = String::new();
+
+        if let bollard::exec::StartExecResults::Attached { mut output, .. } = output {
+            while let Some(result) = output.next().await {
+                match result {
+                    Ok(log) => {
+                        let (target, message) = match log {
+                            bollard::container::LogOutput::StdOut { message } => {
+                                (&mut stdout, message)
+                            },
+                            bollard::container::LogOutput::StdErr { message } => {
+                                (&mut stderr, message)
+                            },
+                            bollard::container::LogOutput::Console { message } => {
+                                (&mut stdout, message)
+                            },
+                            bollard::container::LogOutput::StdIn { message } => {
+                                (&mut stdout, message)
+                            },
+                        };
+                        target.push_str(&String::from_utf8_lossy(&message));
+                    },
+                    Err(e) => {
+                        return Err(AppError::Docker(format!("Exec stream error: {}", e)));
+                    },
+                }
+            }
+        }
+
+        let exec_inspect = self
+            .docker
+            .inspect_exec(&exec.id)
+            .await
+            .map_err(|e| AppError::Docker(format!("Failed to inspect exec: {}", e)))?;
+
+        Ok(ExecOutput {
+            stdout,
+            stderr,
+            exit_code: exec_inspect.exit_code,
+        })
     }
 
     pub fn docker(&self) -> &Docker {
