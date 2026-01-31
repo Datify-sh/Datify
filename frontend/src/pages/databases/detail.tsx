@@ -1,9 +1,5 @@
-import { BranchPanel } from "@/components/database/branch-panel";
 import { BranchSwitcher } from "@/components/database/branch-switcher";
 import { CreateBranchDialog } from "@/components/database/create-branch-dialog";
-import { MetricsPanel } from "@/components/database/metrics-panel";
-import { QueryLogsPanel } from "@/components/database/query-logs-panel";
-import { TerminalComponent, type TerminalRef } from "@/components/terminal";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -17,30 +13,18 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
+import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Slider } from "@/components/ui/slider";
 import { Spinner } from "@/components/ui/spinner";
-import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useLogStream } from "@/hooks/use-log-stream";
 import { useMetricsStream } from "@/hooks/use-metrics-stream";
-import {
-  type UpdateDatabaseRequest,
-  databasesApi,
-  getErrorMessage,
-  projectsApi,
-  systemApi,
-} from "@/lib/api";
-import { Decoration, EditorView, ViewPlugin, type ViewUpdate, placeholder } from "@codemirror/view";
+import { databasesApi, getErrorMessage, projectsApi } from "@/lib/api";
+import type { TerminalType } from "@/pages/databases/detail-context";
 import {
   ArrowDownIcon,
   BarChartIcon,
   CommandLineIcon,
-  Copy01Icon,
   Database01Icon,
   Delete01Icon,
   File01Icon,
@@ -51,16 +35,12 @@ import {
   RefreshIcon,
   Settings01Icon,
   SquareLock02Icon,
-  ViewIcon,
-  ViewOffIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useVirtualizer } from "@tanstack/react-virtual";
-import CodeMirror from "@uiw/react-codemirror";
 import { format } from "date-fns";
 import * as React from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, Outlet, useLocation, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
 const statusColors: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
@@ -71,775 +51,41 @@ const statusColors: Record<string, "default" | "secondary" | "destructive" | "ou
   error: "destructive",
 };
 
-const configTheme = EditorView.theme(
-  {
-    "&": {
-      backgroundColor: "transparent",
-      color: "#d1fae5",
-      fontFamily:
-        'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
-      fontSize: "12px",
-    },
-    ".cm-scroller": {
-      backgroundColor: "#0a0a0a",
-    },
-    ".cm-content": {
-      padding: "16px",
-      caretColor: "#34d399",
-    },
-    ".cm-selectionBackground": {
-      backgroundColor: "rgba(16, 185, 129, 0.25)",
-    },
-    ".cm-activeLine": {
-      backgroundColor: "rgba(255, 255, 255, 0.04)",
-    },
-    ".cm-gutters": {
-      backgroundColor: "#0a0a0a",
-      color: "#6b7280",
-      border: "none",
-    },
-    ".cm-activeLineGutter": {
-      color: "#e5e7eb",
-    },
-    ".cm-config-comment": {
-      color: "#64748b",
-      fontStyle: "italic",
-    },
-    ".cm-config-key": {
-      color: "#7dd3fc",
-    },
-    ".cm-config-string": {
-      color: "#f9a8d4",
-    },
-    ".cm-config-number": {
-      color: "#facc15",
-    },
-    ".cm-config-bool": {
-      color: "#a78bfa",
-    },
-    ".cm-config-operator": {
-      color: "#94a3b8",
-    },
-  },
-  { dark: true },
-);
+type DatabaseTabKey =
+  | "connection"
+  | "branches"
+  | "metrics"
+  | "terminal"
+  | "logs"
+  | "config"
+  | "settings";
 
-const configKeyDecoration = Decoration.mark({ class: "cm-config-key" });
-const configStringDecoration = Decoration.mark({ class: "cm-config-string" });
-const configNumberDecoration = Decoration.mark({ class: "cm-config-number" });
-const configBoolDecoration = Decoration.mark({ class: "cm-config-bool" });
-const configCommentDecoration = Decoration.mark({ class: "cm-config-comment" });
-const configOperatorDecoration = Decoration.mark({ class: "cm-config-operator" });
+const loadConnectionTab = () => import("./tabs/connection");
+const loadBranchesTab = () => import("./tabs/branches");
+const loadMetricsTab = () => import("./tabs/metrics");
+const loadTerminalTab = () => import("./tabs/terminal");
+const loadLogsTab = () => import("./tabs/logs");
+const loadConfigTab = () => import("./tabs/config");
+const loadSettingsTab = () => import("./tabs/settings");
 
-const configBooleanPattern = /^(true|false|yes|no|on|off)$/i;
-const configNumberPattern = /^[0-9]+(?:\.[0-9]+)?[a-z%]*$/i;
-
-function buildConfigDecorations(view: EditorView) {
-  const ranges: ReturnType<typeof configKeyDecoration.range>[] = [];
-
-  for (const { from, to } of view.visibleRanges) {
-    let line = view.state.doc.lineAt(from);
-    while (line.from <= to) {
-      const text = line.text;
-      const lineStart = line.from;
-
-      const commentMatch = /(^|\s)([#;])/.exec(text);
-      let contentEnd = text.length;
-      if (commentMatch) {
-        const commentIndex = commentMatch.index + commentMatch[1].length;
-        ranges.push(configCommentDecoration.range(lineStart + commentIndex, line.to));
-        contentEnd = commentIndex;
-      }
-
-      const leadingIndex = text.slice(0, contentEnd).search(/\S/);
-      if (leadingIndex >= 0) {
-        let cursor = leadingIndex;
-        while (cursor < contentEnd && /[A-Za-z0-9_.-]/.test(text[cursor])) {
-          cursor += 1;
-        }
-
-        if (cursor > leadingIndex) {
-          ranges.push(configKeyDecoration.range(lineStart + leadingIndex, lineStart + cursor));
-        }
-
-        let separatorIndex = cursor;
-        while (separatorIndex < contentEnd && /\s/.test(text[separatorIndex])) {
-          separatorIndex += 1;
-        }
-        if (separatorIndex < contentEnd && text[separatorIndex] === "=") {
-          ranges.push(
-            configOperatorDecoration.range(
-              lineStart + separatorIndex,
-              lineStart + separatorIndex + 1,
-            ),
-          );
-          separatorIndex += 1;
-        }
-        while (separatorIndex < contentEnd && /\s/.test(text[separatorIndex])) {
-          separatorIndex += 1;
-        }
-
-        if (separatorIndex < contentEnd) {
-          let valueEnd = contentEnd;
-          while (valueEnd > separatorIndex && /\s/.test(text[valueEnd - 1])) {
-            valueEnd -= 1;
-          }
-          const value = text.slice(separatorIndex, valueEnd);
-          if (value.startsWith('"') || value.startsWith("'")) {
-            ranges.push(
-              configStringDecoration.range(lineStart + separatorIndex, lineStart + valueEnd),
-            );
-          } else if (configBooleanPattern.test(value)) {
-            ranges.push(
-              configBoolDecoration.range(lineStart + separatorIndex, lineStart + valueEnd),
-            );
-          } else if (configNumberPattern.test(value)) {
-            ranges.push(
-              configNumberDecoration.range(lineStart + separatorIndex, lineStart + valueEnd),
-            );
-          } else {
-            ranges.push(
-              configStringDecoration.range(lineStart + separatorIndex, lineStart + valueEnd),
-            );
-          }
-        }
-      }
-
-      if (line.to >= to) {
-        break;
-      }
-      line = view.state.doc.lineAt(line.to + 1);
-    }
-  }
-
-  return Decoration.set(ranges, true);
-}
-
-const configHighlightPlugin = ViewPlugin.fromClass(
-  class {
-    decorations;
-    view: EditorView;
-
-    constructor(view: EditorView) {
-      this.view = view;
-      this.decorations = buildConfigDecorations(view);
-    }
-
-    update(update: ViewUpdate) {
-      if (update.docChanged || update.viewportChanged) {
-        this.decorations = buildConfigDecorations(update.view);
-      }
-    }
-  },
-  {
-    decorations: (value) => value.decorations,
-  },
-);
-
-const baseConfigExtensions = [configTheme, configHighlightPlugin, EditorView.lineWrapping];
-
-const LogsPanel = React.memo(function LogsPanel({ databaseId }: { databaseId: string }) {
-  const [streaming, setStreaming] = React.useState(true);
-  const scrollContainerRef = React.useRef<HTMLDivElement>(null);
-
-  const { entries, isConnected, isConnecting, clear } = useLogStream(databaseId, {
-    tail: 200,
-    enabled: streaming,
-  });
-
-  const virtualizer = useVirtualizer({
-    count: entries.length,
-    getScrollElement: () => scrollContainerRef.current,
-    estimateSize: () => 24,
-    overscan: 10,
-  });
-
-  const prevEntriesLengthRef = React.useRef(entries.length);
-  React.useEffect(() => {
-    if (streaming && entries.length > prevEntriesLengthRef.current && scrollContainerRef.current) {
-      virtualizer.scrollToIndex(entries.length - 1, { align: "end" });
-    }
-    prevEntriesLengthRef.current = entries.length;
-  }, [entries.length, streaming, virtualizer]);
-
-  const toggleStreaming = React.useCallback(() => setStreaming((s) => !s), []);
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-2">
-            <div
-              className={`size-2 rounded-full ${isConnected ? "bg-green-500" : isConnecting ? "bg-yellow-500 animate-pulse" : "bg-neutral-500"}`}
-            />
-            <span className="text-sm text-muted-foreground">
-              {isConnected ? "Live" : isConnecting ? "Connecting..." : "Disconnected"}
-            </span>
-          </div>
-          <Button variant={streaming ? "default" : "outline"} size="sm" onClick={toggleStreaming}>
-            {streaming ? "Pause" : "Resume"}
-          </Button>
-          <Button variant="outline" size="sm" onClick={clear}>
-            Clear
-          </Button>
-        </div>
-        <span className="text-sm text-muted-foreground">{entries.length} entries</span>
-      </div>
-
-      <div
-        ref={scrollContainerRef}
-        className="h-[500px] overflow-auto rounded-lg border bg-[#0a0a0a] font-mono text-sm"
-      >
-        {isConnecting && entries.length === 0 ? (
-          <div className="flex h-full items-center justify-center">
-            <Spinner className="size-6" />
-          </div>
-        ) : entries.length === 0 ? (
-          <div className="flex h-full items-center justify-center text-muted-foreground">
-            No logs available
-          </div>
-        ) : (
-          <div className="relative w-full" style={{ height: `${virtualizer.getTotalSize()}px` }}>
-            {virtualizer.getVirtualItems().map((virtualRow) => {
-              const entry = entries[virtualRow.index];
-              return (
-                <div
-                  key={virtualRow.key}
-                  className="absolute left-0 w-full flex gap-3 text-xs leading-relaxed hover:bg-white/5 px-4 py-0.5"
-                  style={{
-                    height: `${virtualRow.size}px`,
-                    transform: `translateY(${virtualRow.start}px)`,
-                  }}
-                >
-                  {entry.timestamp && (
-                    <span className="text-neutral-500 shrink-0 tabular-nums">
-                      {format(new Date(entry.timestamp), "HH:mm:ss")}
-                    </span>
-                  )}
-                  <span className={entry.stream === "stderr" ? "text-red-400" : "text-neutral-300"}>
-                    {entry.message}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-});
-
-const TerminalPanel = React.memo(function TerminalPanel({
-  databaseId,
-  type,
-}: { databaseId: string; type: "shell" | "psql" | "valkey-cli" | "redis-cli" }) {
-  const [isConnected, setIsConnected] = React.useState(false);
-  const terminalRef = React.useRef<TerminalRef>(null);
-
-  const wsUrl = React.useMemo(() => {
-    if (type === "psql") return databasesApi.getPsqlUrl(databaseId);
-    if (type === "valkey-cli") return databasesApi.getValkeyCliUrl(databaseId);
-    if (type === "redis-cli") return databasesApi.getRedisCliUrl(databaseId);
-    return databasesApi.getTerminalUrl(databaseId);
-  }, [type, databaseId]);
-
-  const handleReconnect = React.useCallback(() => {
-    terminalRef.current?.reconnect();
-  }, []);
-  const handleConnected = React.useCallback(() => setIsConnected(true), []);
-  const handleDisconnected = React.useCallback(() => setIsConnected(false), []);
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div
-            className={`size-2 rounded-full ${isConnected ? "bg-green-500" : "bg-neutral-500"}`}
-          />
-          <span className="text-sm text-muted-foreground">
-            {isConnected ? "Connected" : "Disconnected"}
-          </span>
-        </div>
-        <Button variant="outline" size="sm" onClick={handleReconnect}>
-          <HugeiconsIcon icon={RefreshIcon} className="size-4" strokeWidth={2} />
-          Reconnect
-        </Button>
-      </div>
-
-      <div className="h-[500px] rounded-lg border overflow-hidden">
-        <TerminalComponent
-          ref={terminalRef}
-          wsUrl={wsUrl}
-          onConnected={handleConnected}
-          onDisconnected={handleDisconnected}
-        />
-      </div>
-    </div>
-  );
-});
-
-const ConnectionPanel = React.memo(function ConnectionPanel({
-  database,
-}: { database: NonNullable<Awaited<ReturnType<typeof databasesApi.get>>> }) {
-  const connection = database.connection;
-  const [showPassword, setShowPassword] = React.useState(false);
-
-  const { data: systemInfo } = useQuery({
-    queryKey: ["system-info"],
-    queryFn: () => systemApi.getInfo(),
-    staleTime: 5 * 60 * 1000,
-  });
-
-  const copyToClipboard = React.useCallback((text: string, label: string) => {
-    navigator.clipboard.writeText(text);
-    toast.success(`${label} copied`);
-  }, []);
-
-  const togglePassword = React.useCallback(() => setShowPassword((s) => !s), []);
-
-  if (!connection) {
-    return (
-      <Card>
-        <CardContent className="flex flex-col items-center justify-center py-12">
-          <HugeiconsIcon
-            icon={Database01Icon}
-            className="size-12 text-muted-foreground"
-            strokeWidth={1.5}
-          />
-          <p className="mt-4 text-muted-foreground">Start the database to see connection details</p>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  const publicHost = systemInfo?.public_host;
-  const displayHost =
-    database.public_exposed && publicHost && publicHost !== "localhost"
-      ? publicHost
-      : connection.host;
-  const displayConnectionString =
-    database.public_exposed && publicHost && publicHost !== "localhost"
-      ? connection.connection_string.replace(connection.host, publicHost)
-      : connection.connection_string;
-
-  return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Connection String</CardTitle>
-          <CardDescription>Use this to connect from your application</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex gap-2">
-            <Input value={displayConnectionString} readOnly className="font-mono text-xs" />
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => copyToClipboard(displayConnectionString, "Connection string")}
-            >
-              <HugeiconsIcon icon={Copy01Icon} className="size-4" strokeWidth={2} />
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {[
-          { label: "Host", value: displayHost },
-          { label: "Port", value: String(connection.port) },
-          { label: "Database", value: connection.database },
-          { label: "Username", value: connection.username },
-        ].map((item) => (
-          <Card key={item.label}>
-            <CardContent className="pt-4">
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs text-muted-foreground">{item.label}</p>
-                  <code className="text-sm break-all">{item.value}</code>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  className="shrink-0"
-                  onClick={() => copyToClipboard(item.value, item.label)}
-                >
-                  <HugeiconsIcon icon={Copy01Icon} className="size-3.5" strokeWidth={2} />
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-        <Card>
-          <CardContent className="pt-4">
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0 flex-1">
-                <p className="text-xs text-muted-foreground">Password</p>
-                <code className="text-sm break-all">
-                  {showPassword ? connection.password : "••••••••"}
-                </code>
-              </div>
-              <div className="flex gap-1 shrink-0">
-                <Button variant="ghost" size="icon-sm" onClick={togglePassword}>
-                  <HugeiconsIcon
-                    icon={showPassword ? ViewOffIcon : ViewIcon}
-                    className="size-3.5"
-                    strokeWidth={2}
-                  />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  onClick={() => copyToClipboard(connection.password, "Password")}
-                >
-                  <HugeiconsIcon icon={Copy01Icon} className="size-3.5" strokeWidth={2} />
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    </div>
-  );
-});
-
-const ConfigPanel = React.memo(function ConfigPanel({
-  database,
-}: { database: NonNullable<Awaited<ReturnType<typeof databasesApi.get>>> }) {
-  const queryClient = useQueryClient();
-
-  const {
-    data: config,
-    isLoading,
-    isError,
-    isFetching,
-    refetch,
-  } = useQuery({
-    queryKey: ["database-config", database.id],
-    queryFn: () => databasesApi.getConfig(database.id),
-    staleTime: 30_000,
-    refetchOnWindowFocus: false,
-  });
-
-  const [draft, setDraft] = React.useState("");
-
-  React.useEffect(() => {
-    if (config) {
-      setDraft(config.content ?? "");
-    }
-  }, [config]);
-
-  const updateMutation = useMutation({
-    mutationFn: (content: string) => databasesApi.updateConfig(database.id, { content }),
-    onSuccess: (response) => {
-      queryClient.invalidateQueries({ queryKey: ["database-config", database.id] });
-      toast.success(response.applied ? "Config applied" : "Config saved");
-    },
-    onError: (err) => toast.error(getErrorMessage(err, "Failed to update config")),
-  });
-
-  const hasChanges = draft !== (config?.content ?? "");
-  const lineCount = React.useMemo(() => (draft.length ? draft.split("\n").length : 0), [draft]);
-
-  const placeholderText =
-    config?.format === "kv"
-      ? "# maxmemory 256mb\n# maxmemory-policy allkeys-lru"
-      : "# Add your config values here";
-
-  const editorExtensions = React.useMemo(
-    () => [...baseConfigExtensions, placeholder(placeholderText)],
-    [placeholderText],
-  );
-
-  if (isError) {
-    return (
-      <Card>
-        <CardContent className="py-10 text-center space-y-3">
-          <p className="text-sm text-muted-foreground">Failed to load config.</p>
-          <Button variant="outline" size="sm" onClick={() => refetch()}>
-            <HugeiconsIcon icon={RefreshIcon} className="size-4" strokeWidth={2} />
-            Try again
-          </Button>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  return (
-    <Card className="relative overflow-hidden">
-      <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <CardTitle className="text-base">Config Editor</CardTitle>
-          <CardDescription>Edit and apply runtime settings.</CardDescription>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
-            <HugeiconsIcon icon={RefreshIcon} className="size-4" strokeWidth={2} />
-            Refresh
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setDraft(config?.content ?? "")}
-            disabled={!hasChanges}
-          >
-            Reset
-          </Button>
-          <Button
-            size="sm"
-            onClick={() => updateMutation.mutate(draft)}
-            disabled={!hasChanges || updateMutation.isPending || isLoading}
-          >
-            {updateMutation.isPending ? <Spinner className="size-4" /> : "Save & Apply"}
-          </Button>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {isLoading ? (
-          <div className="space-y-3">
-            <Skeleton className="h-6 w-1/3" />
-            <Skeleton className="h-[520px] w-full" />
-          </div>
-        ) : (
-          <CodeMirror
-            value={draft}
-            onChange={(value) => setDraft(value)}
-            height="520px"
-            theme={configTheme}
-            extensions={editorExtensions}
-            basicSetup={{
-              lineNumbers: true,
-              foldGutter: false,
-              highlightActiveLineGutter: true,
-            }}
-          />
-        )}
-        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-          <span>{lineCount} lines</span>
-          <span>{draft.length} chars</span>
-        </div>
-      </CardContent>
-    </Card>
-  );
-});
-
-const SettingsPanel = React.memo(function SettingsPanel({
-  database,
-}: { database: NonNullable<Awaited<ReturnType<typeof databasesApi.get>>> }) {
-  const queryClient = useQueryClient();
-
-  const dbName = database.name;
-  const dbCpuLimit = database.resources.cpu_limit;
-  const dbMemoryLimit = database.resources.memory_limit_mb;
-  const dbStorageLimit = database.resources.storage_limit_mb;
-  const dbPublicExposed = database.public_exposed ?? false;
-
-  const [settings, setSettings] = React.useState({
-    name: dbName,
-    cpu_limit: dbCpuLimit,
-    memory_limit_mb: dbMemoryLimit,
-    storage_limit_mb: dbStorageLimit,
-    public_exposed: dbPublicExposed,
-  });
-
-  const { data: systemInfo } = useQuery({
-    queryKey: ["system-info"],
-    queryFn: () => systemApi.getInfo(),
-    staleTime: 5 * 60 * 1000,
-    refetchOnWindowFocus: false,
-  });
-
-  const maxCpu = systemInfo?.cpu_cores ?? 4;
-  const maxMemory = systemInfo?.total_memory_mb ?? 4096;
-
-  React.useEffect(() => {
-    setSettings({
-      name: dbName,
-      cpu_limit: dbCpuLimit,
-      memory_limit_mb: dbMemoryLimit,
-      storage_limit_mb: dbStorageLimit,
-      public_exposed: dbPublicExposed,
-    });
-  }, [dbName, dbCpuLimit, dbMemoryLimit, dbStorageLimit, dbPublicExposed]);
-
-  const updateMutation = useMutation({
-    mutationFn: (data: UpdateDatabaseRequest) => databasesApi.update(database.id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["database", database.id] });
-      toast.success("Settings saved");
-    },
-    onError: (err) => toast.error(getErrorMessage(err, "Failed to save settings")),
-  });
-
-  const handleSave = React.useCallback(() => {
-    updateMutation.mutate({
-      name: settings.name !== dbName ? settings.name : null,
-      cpu_limit: settings.cpu_limit !== dbCpuLimit ? settings.cpu_limit : null,
-      memory_limit_mb: settings.memory_limit_mb !== dbMemoryLimit ? settings.memory_limit_mb : null,
-      storage_limit_mb:
-        settings.storage_limit_mb !== dbStorageLimit ? settings.storage_limit_mb : null,
-      public_exposed: settings.public_exposed !== dbPublicExposed ? settings.public_exposed : null,
-    });
-  }, [
-    updateMutation,
-    settings,
-    dbName,
-    dbCpuLimit,
-    dbMemoryLimit,
-    dbStorageLimit,
-    dbPublicExposed,
-  ]);
-
-  const hasChanges =
-    settings.name !== dbName ||
-    settings.cpu_limit !== dbCpuLimit ||
-    settings.memory_limit_mb !== dbMemoryLimit ||
-    settings.storage_limit_mb !== dbStorageLimit ||
-    settings.public_exposed !== dbPublicExposed;
-
-  const isRunning = database.status === "running";
-
-  const formatMemory = (mb: number) => {
-    if (mb >= 1024) return `${(mb / 1024).toFixed(1)} GB`;
-    return `${mb} MB`;
-  };
-
-  return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">General</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {isRunning && (
-            <div className="rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
-              Stop the database to change name or access settings
-            </div>
-          )}
-          <Field>
-            <FieldLabel>Database Name</FieldLabel>
-            <Input
-              value={settings.name}
-              onChange={(e) => setSettings({ ...settings, name: e.target.value })}
-              disabled={isRunning}
-            />
-          </Field>
-
-          <Field>
-            <div className="flex items-center justify-between">
-              <div>
-                <FieldLabel>Public Access</FieldLabel>
-                <FieldDescription>Allow connections from outside the network</FieldDescription>
-              </div>
-              <Switch
-                checked={settings.public_exposed}
-                onCheckedChange={(checked) => setSettings({ ...settings, public_exposed: checked })}
-                disabled={isRunning}
-              />
-            </div>
-          </Field>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Resources</CardTitle>
-          <CardDescription>Resource limits for this database container</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {isRunning && (
-            <div className="rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
-              Stop the database to change resource limits
-            </div>
-          )}
-          <Field>
-            <div className="flex items-center justify-between">
-              <FieldLabel>CPU Cores</FieldLabel>
-              <span className="text-sm font-medium">{settings.cpu_limit}</span>
-            </div>
-            <Slider
-              value={[settings.cpu_limit]}
-              onValueChange={(value) =>
-                setSettings({ ...settings, cpu_limit: Array.isArray(value) ? value[0] : value })
-              }
-              min={0.5}
-              max={maxCpu}
-              step={0.5}
-              disabled={isRunning}
-            />
-            <div className="flex justify-between text-xs text-muted-foreground">
-              <span>0.5</span>
-              <span>{maxCpu}</span>
-            </div>
-          </Field>
-
-          <Field>
-            <div className="flex items-center justify-between">
-              <FieldLabel>Memory</FieldLabel>
-              <span className="text-sm font-medium">{formatMemory(settings.memory_limit_mb)}</span>
-            </div>
-            <Slider
-              value={[settings.memory_limit_mb]}
-              onValueChange={(value) =>
-                setSettings({
-                  ...settings,
-                  memory_limit_mb: Array.isArray(value) ? value[0] : value,
-                })
-              }
-              min={256}
-              max={maxMemory}
-              step={256}
-              disabled={isRunning}
-            />
-            <div className="flex justify-between text-xs text-muted-foreground">
-              <span>256 MB</span>
-              <span>{formatMemory(maxMemory)}</span>
-            </div>
-          </Field>
-
-          <Field>
-            <div className="flex items-center justify-between">
-              <FieldLabel>Storage</FieldLabel>
-              <span className="text-sm font-medium">{formatMemory(settings.storage_limit_mb)}</span>
-            </div>
-            <Slider
-              value={[settings.storage_limit_mb]}
-              onValueChange={(value) =>
-                setSettings({
-                  ...settings,
-                  storage_limit_mb: Array.isArray(value) ? value[0] : value,
-                })
-              }
-              min={512}
-              max={102400}
-              step={512}
-              disabled={isRunning}
-            />
-            <div className="flex justify-between text-xs text-muted-foreground">
-              <span>512 MB</span>
-              <span>100 GB</span>
-            </div>
-          </Field>
-        </CardContent>
-      </Card>
-
-      <div className="flex justify-end">
-        <Button onClick={handleSave} disabled={!hasChanges || updateMutation.isPending}>
-          {updateMutation.isPending && <Spinner className="size-4" />}
-          Save Changes
-        </Button>
-      </div>
-    </div>
-  );
-});
+const TAB_ROUTE_MAP: Record<DatabaseTabKey, string> = {
+  connection: "",
+  branches: "branches",
+  metrics: "metrics",
+  terminal: "terminal",
+  logs: "logs",
+  config: "config",
+  settings: "settings",
+};
 
 export function DatabaseDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const location = useLocation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [terminalType, setTerminalType] = React.useState<
-    "shell" | "psql" | "valkey-cli" | "redis-cli"
-  >("psql");
+  const [terminalType, setTerminalType] = React.useState<TerminalType>("psql");
   const [isCreateBranchOpen, setIsCreateBranchOpen] = React.useState(false);
+  const openCreateBranch = React.useCallback(() => setIsCreateBranchOpen(true), []);
 
   const {
     data: database,
@@ -982,6 +228,84 @@ export function DatabaseDetailPage() {
     onError: (err) => toast.error(getErrorMessage(err, "Failed to sync from parent")),
   });
 
+  const isRunning = database?.status === "running";
+  const isTransitioning = database?.status === "starting" || database?.status === "stopping";
+  const isActionLoading =
+    startMutation.isPending || stopMutation.isPending || restartMutation.isPending;
+  const isKeyValue = database?.database_type === "valkey" || database?.database_type === "redis";
+  const isValkey = database?.database_type === "valkey";
+  const isRedis = database?.database_type === "redis";
+  const hasBranches = database?.branch !== undefined;
+  const isChildBranch = database?.branch?.parent_id != null;
+
+  const tabFromPath = React.useMemo<DatabaseTabKey>(() => {
+    if (!id) return "connection";
+    const basePath = `/databases/${id}`;
+    const remainder = location.pathname.startsWith(basePath)
+      ? location.pathname.slice(basePath.length)
+      : "";
+    const segment = remainder.replace(/^\//, "").split("/")[0] || "connection";
+    if (segment in TAB_ROUTE_MAP) return segment as DatabaseTabKey;
+    return "connection";
+  }, [id, location.pathname]);
+
+  const activeTab = !hasBranches && tabFromPath === "branches" ? "connection" : tabFromPath;
+
+  const handleTabChange = React.useCallback(
+    (nextTab: string) => {
+      if (!id) return;
+      if (!(nextTab in TAB_ROUTE_MAP)) return;
+      const segment = TAB_ROUTE_MAP[nextTab as DatabaseTabKey];
+      const target = segment ? `/databases/${id}/${segment}` : `/databases/${id}`;
+      navigate(target);
+    },
+    [id, navigate],
+  );
+
+  React.useEffect(() => {
+    if (!hasBranches && tabFromPath === "branches" && id) {
+      navigate(`/databases/${id}`, { replace: true });
+    }
+  }, [hasBranches, tabFromPath, id, navigate]);
+
+  const outletContext = React.useMemo(() => {
+    if (!database) return null;
+    return {
+      database,
+      project,
+      parentDatabase,
+      id: id ?? database.id,
+      isRunning: !!isRunning,
+      isTransitioning: !!isTransitioning,
+      isKeyValue: !!isKeyValue,
+      isValkey: !!isValkey,
+      isRedis: !!isRedis,
+      hasBranches: !!hasBranches,
+      isChildBranch: !!isChildBranch,
+      terminalType,
+      setTerminalType,
+      openCreateBranch,
+      startDatabase: () => startMutation.mutate(),
+      startDatabasePending: startMutation.isPending,
+    };
+  }, [
+    database,
+    project,
+    parentDatabase,
+    id,
+    isRunning,
+    isTransitioning,
+    isKeyValue,
+    isValkey,
+    isRedis,
+    hasBranches,
+    isChildBranch,
+    terminalType,
+    openCreateBranch,
+    startMutation,
+    startMutation.isPending,
+  ]);
+
   if (isLoading || !database) {
     return (
       <div className="space-y-6">
@@ -1016,11 +340,6 @@ export function DatabaseDetailPage() {
     );
   }
 
-  const isRunning = database.status === "running";
-  const isTransitioning = database.status === "starting" || database.status === "stopping";
-  const isActionLoading =
-    startMutation.isPending || stopMutation.isPending || restartMutation.isPending;
-
   const getStorageUsedBytes = () => {
     if (!realtimeMetrics) return 0;
     if (realtimeMetrics.database_type === "postgres") {
@@ -1034,12 +353,6 @@ export function DatabaseDetailPage() {
       ? Math.round(storageUsedBytes / (1024 * 1024))
       : (database.storage_used_mb ?? 0);
   const storagePercent = (storageUsed / database.resources.storage_limit_mb) * 100;
-
-  const isKeyValue = database.database_type === "valkey" || database.database_type === "redis";
-  const isValkey = database.database_type === "valkey";
-  const isRedis = database.database_type === "redis";
-  const hasBranches = database.branch !== undefined;
-  const isChildBranch = database.branch?.parent_id != null;
 
   return (
     <div className="space-y-6">
@@ -1065,7 +378,7 @@ export function DatabaseDetailPage() {
               <BranchSwitcher
                 databaseId={id}
                 currentBranchName={database.branch.name}
-                onCreateBranch={() => setIsCreateBranchOpen(true)}
+                onCreateBranch={openCreateBranch}
               />
             )}
           </div>
@@ -1208,145 +521,42 @@ export function DatabaseDetailPage() {
         </CardContent>
       </Card>
 
-      <Tabs defaultValue="connection">
+      <Tabs value={activeTab} onValueChange={handleTabChange}>
         <TabsList>
-          <TabsTrigger value="connection">
+          <TabsTrigger value="connection" onMouseEnter={() => void loadConnectionTab()}>
             <HugeiconsIcon icon={Database01Icon} className="size-4" strokeWidth={2} />
             Connection
           </TabsTrigger>
           {hasBranches && (
-            <TabsTrigger value="branches">
+            <TabsTrigger value="branches" onMouseEnter={() => void loadBranchesTab()}>
               <HugeiconsIcon icon={GitBranchIcon} className="size-4" strokeWidth={2} />
               Branches
             </TabsTrigger>
           )}
-          <TabsTrigger value="metrics">
+          <TabsTrigger value="metrics" onMouseEnter={() => void loadMetricsTab()}>
             <HugeiconsIcon icon={BarChartIcon} className="size-4" strokeWidth={2} />
             Metrics
           </TabsTrigger>
-          <TabsTrigger value="terminal">
+          <TabsTrigger value="terminal" onMouseEnter={() => void loadTerminalTab()}>
             <HugeiconsIcon icon={CommandLineIcon} className="size-4" strokeWidth={2} />
             Terminal
           </TabsTrigger>
-          <TabsTrigger value="logs">
+          <TabsTrigger value="logs" onMouseEnter={() => void loadLogsTab()}>
             <HugeiconsIcon icon={File01Icon} className="size-4" strokeWidth={2} />
             Logs
           </TabsTrigger>
-          <TabsTrigger value="config">
+          <TabsTrigger value="config" onMouseEnter={() => void loadConfigTab()}>
             <HugeiconsIcon icon={Settings01Icon} className="size-4" strokeWidth={2} />
             Config
           </TabsTrigger>
-          <TabsTrigger value="settings">
+          <TabsTrigger value="settings" onMouseEnter={() => void loadSettingsTab()}>
             <HugeiconsIcon icon={Settings01Icon} className="size-4" strokeWidth={2} />
             Settings
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="connection" className="mt-6">
-          <ConnectionPanel database={database} />
-        </TabsContent>
-
-        {hasBranches && id && (
-          <TabsContent value="branches" className="mt-6">
-            <BranchPanel
-              databaseId={id}
-              currentBranchId={id}
-              onCreateBranch={() => setIsCreateBranchOpen(true)}
-            />
-          </TabsContent>
-        )}
-
-        <TabsContent value="metrics" className="mt-6">
-          <div className="space-y-6">
-            <MetricsPanel
-              databaseId={database.id}
-              databaseType={database.database_type}
-              isRunning={isRunning}
-            />
-            {!isKeyValue && <QueryLogsPanel databaseId={database.id} isRunning={isRunning} />}
-          </div>
-        </TabsContent>
-
-        <TabsContent value="terminal" className="mt-6">
-          {isRunning ? (
-            <div className="space-y-4">
-              <div className="flex items-center gap-2">
-                {isValkey && (
-                  <Button
-                    variant={terminalType === "valkey-cli" ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setTerminalType("valkey-cli")}
-                  >
-                    Valkey CLI
-                  </Button>
-                )}
-                {isRedis && (
-                  <Button
-                    variant={terminalType === "redis-cli" ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setTerminalType("redis-cli")}
-                  >
-                    Redis CLI
-                  </Button>
-                )}
-                {!isKeyValue && (
-                  <Button
-                    variant={terminalType === "psql" ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setTerminalType("psql")}
-                  >
-                    PSQL
-                  </Button>
-                )}
-                <Button
-                  variant={terminalType === "shell" ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setTerminalType("shell")}
-                >
-                  Shell
-                </Button>
-              </div>
-              <TerminalPanel
-                databaseId={database.id}
-                type={
-                  isValkey && terminalType === "psql"
-                    ? "valkey-cli"
-                    : isRedis && terminalType === "psql"
-                      ? "redis-cli"
-                      : terminalType
-                }
-              />
-            </div>
-          ) : (
-            <Card>
-              <CardContent className="flex flex-col items-center justify-center py-12">
-                <HugeiconsIcon
-                  icon={CommandLineIcon}
-                  className="size-12 text-muted-foreground"
-                  strokeWidth={1.5}
-                />
-                <p className="mt-4 text-muted-foreground">
-                  Start the database to access the terminal
-                </p>
-                <Button className="mt-4" onClick={() => startMutation.mutate()}>
-                  <HugeiconsIcon icon={PlayIcon} className="size-4" strokeWidth={2} />
-                  Start Database
-                </Button>
-              </CardContent>
-            </Card>
-          )}
-        </TabsContent>
-
-        <TabsContent value="logs" className="mt-6">
-          <LogsPanel databaseId={database.id} />
-        </TabsContent>
-
-        <TabsContent value="config" className="mt-6">
-          <ConfigPanel database={database} />
-        </TabsContent>
-
-        <TabsContent value="settings" className="mt-6">
-          <SettingsPanel database={database} />
+        <TabsContent value={activeTab} className="mt-6">
+          <Outlet context={outletContext} />
         </TabsContent>
       </Tabs>
 
