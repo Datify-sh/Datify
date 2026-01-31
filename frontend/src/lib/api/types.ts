@@ -467,3 +467,59 @@ export interface TablePreview {
   limit: number;
   offset: number;
 }
+
+export type AuditAction =
+  | "login"
+  | "logout"
+  | "register"
+  | "create_project"
+  | "update_project"
+  | "delete_project"
+  | "create_database"
+  | "update_database"
+  | "delete_database"
+  | "start_database"
+  | "stop_database"
+  | "change_password"
+  | "create_branch"
+  | "sync_from_parent"
+  | "execute_query";
+
+export type AuditEntityType = "user" | "project" | "database" | "branch" | "query";
+
+export type AuditStatus = "success" | "failure";
+
+export interface AuditLogResponse {
+  id: string;
+  user_id: string;
+  user_email?: string | null;
+  user_name?: string | null;
+  action: AuditAction;
+  entity_type: AuditEntityType;
+  entity_id?: string | null;
+  changes?: Record<string, unknown> | null;
+  status: AuditStatus;
+  ip_address?: string | null;
+  user_agent?: string | null;
+  created_at: string;
+}
+
+export interface AuditLogFilter {
+  action?: string;
+  entity_type?: string;
+  status?: string;
+  start_date?: string;
+  end_date?: string;
+}
+
+export interface PaginatedAuditLogsResponse {
+  data: AuditLogResponse[];
+  pagination: {
+    page: number;
+    page_size: number;
+    total_items: number;
+    total_pages: number;
+    has_next: boolean;
+    has_prev: boolean;
+  };
+}

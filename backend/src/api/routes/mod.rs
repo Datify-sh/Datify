@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use axum::http::{header, HeaderValue, Method};
 use axum::{
-    middleware,
+    middleware, Extension,
     routing::{get, post},
     Router,
 };
@@ -12,12 +12,12 @@ use tower_http::services::{ServeDir, ServeFile};
 use tower_http::trace::TraceLayer;
 
 use crate::api::handlers::{
-    self, AuthServiceState, DatabaseServiceState, HealthState, LogsState, MetricsState,
-    ProjectServiceState, SqlState, TerminalState,
+    self, AuditLogServiceState, AuthServiceState, DatabaseServiceState, HealthState, LogsState,
+    MetricsState, ProjectServiceState, SqlState, TerminalState,
 };
 use crate::config::Settings;
 use crate::domain::services::{
-    AuthService, DatabaseService, MetricsService, ProjectService, SqlService,
+    AuditLogService, AuthService, DatabaseService, MetricsService, ProjectService, SqlService,
 };
 use crate::infrastructure::docker::DockerManager;
 use crate::middleware::{
@@ -70,6 +70,8 @@ pub async fn create_router(
         &settings.security.encryption_key,
     ));
 
+    let audit_log_service = Arc::new(AuditLogService::new(repositories.audit_logs.clone()));
+
     let auth_state = AuthState {
         auth_service: auth_service.clone(),
     };
@@ -98,6 +100,7 @@ pub async fn create_router(
         .route("/register", post(handlers::register))
         .route("/login", post(handlers::login))
         .route("/refresh", post(handlers::refresh))
+        .layer(Extension(audit_log_service.clone()))
         .layer(middleware::from_fn_with_state(
             rate_limit_state.clone(),
             auth_rate_limit_middleware,
@@ -205,6 +208,10 @@ pub async fn create_router(
         )
         .with_state(sql_state);
 
+    let audit_log_routes = Router::new()
+        .route("/", get(handlers::list_audit_logs))
+        .with_state(audit_log_service.clone() as AuditLogServiceState);
+
     let protected_routes = Router::new()
         .merge(me_routes)
         .nest("/auth", logout_routes)
@@ -216,6 +223,8 @@ pub async fn create_router(
         .nest("/databases", terminal_routes)
         .nest("/databases", metrics_routes)
         .nest("/databases", sql_routes)
+        .nest("/audit-logs", audit_log_routes)
+        .layer(Extension(audit_log_service.clone()))
         .layer(middleware::from_fn_with_state(
             auth_state.clone(),
             auth_middleware,

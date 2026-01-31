@@ -2,17 +2,32 @@ use std::sync::Arc;
 
 use axum::{
     extract::{Path, State},
-    http::StatusCode,
-    Json,
+    http::{header, HeaderMap, StatusCode},
+    Extension, Json,
 };
 
 use crate::api::extractors::{AuthUser, PaginatedResponse, Pagination};
 use crate::domain::models::{
-    BranchResponse, ChangePasswordRequest, CreateBranchRequest, CreateDatabaseRequest,
-    DatabaseResponse, UpdateDatabaseRequest,
+    AuditAction, AuditEntityType, AuditStatus, BranchResponse, ChangePasswordRequest,
+    CreateBranchRequest, CreateDatabaseRequest, DatabaseResponse, UpdateDatabaseRequest,
 };
-use crate::domain::services::DatabaseService;
+use crate::domain::services::{AuditLogService, DatabaseService};
 use crate::error::{AppError, AppResult};
+
+fn get_client_ip(headers: &HeaderMap) -> Option<String> {
+    headers
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.split(',').next())
+        .map(|s| s.trim().to_string())
+}
+
+fn get_user_agent(headers: &HeaderMap) -> Option<String> {
+    headers
+        .get(header::USER_AGENT)
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string())
+}
 
 pub type DatabaseServiceState = Arc<DatabaseService>;
 
@@ -34,6 +49,8 @@ pub type DatabaseServiceState = Arc<DatabaseService>;
 )]
 pub async fn create_database(
     State(database_service): State<DatabaseServiceState>,
+    Extension(audit_service): Extension<Arc<AuditLogService>>,
+    headers: HeaderMap,
     auth_user: AuthUser,
     Path(project_id): Path<String>,
     Json(payload): Json<CreateDatabaseRequest>,
@@ -53,6 +70,17 @@ pub async fn create_database(
             payload.storage_limit_mb,
         )
         .await?;
+
+    audit_service.log(
+        auth_user.id().to_string(),
+        AuditAction::CreateDatabase,
+        AuditEntityType::Database,
+        Some(database.id.clone()),
+        Some(serde_json::json!({ "name": database.name, "type": database.database_type })),
+        AuditStatus::Success,
+        get_client_ip(&headers),
+        get_user_agent(&headers),
+    );
 
     Ok((StatusCode::CREATED, Json(database)))
 }
@@ -144,6 +172,8 @@ pub async fn get_database(
 )]
 pub async fn update_database(
     State(database_service): State<DatabaseServiceState>,
+    Extension(audit_service): Extension<Arc<AuditLogService>>,
+    headers: HeaderMap,
     auth_user: AuthUser,
     Path(id): Path<String>,
     Json(payload): Json<UpdateDatabaseRequest>,
@@ -159,6 +189,17 @@ pub async fn update_database(
             payload.public_exposed,
         )
         .await?;
+
+    audit_service.log(
+        auth_user.id().to_string(),
+        AuditAction::UpdateDatabase,
+        AuditEntityType::Database,
+        Some(id),
+        None,
+        AuditStatus::Success,
+        get_client_ip(&headers),
+        get_user_agent(&headers),
+    );
 
     Ok(Json(database))
 }
@@ -183,6 +224,8 @@ pub async fn update_database(
 )]
 pub async fn change_database_password(
     State(database_service): State<DatabaseServiceState>,
+    Extension(audit_service): Extension<Arc<AuditLogService>>,
+    headers: HeaderMap,
     auth_user: AuthUser,
     Path(id): Path<String>,
     Json(payload): Json<ChangePasswordRequest>,
@@ -195,6 +238,17 @@ pub async fn change_database_password(
             &payload.new_password,
         )
         .await?;
+
+    audit_service.log(
+        auth_user.id().to_string(),
+        AuditAction::ChangePassword,
+        AuditEntityType::Database,
+        Some(id),
+        None,
+        AuditStatus::Success,
+        get_client_ip(&headers),
+        get_user_agent(&headers),
+    );
 
     Ok(Json(database))
 }
@@ -216,10 +270,24 @@ pub async fn change_database_password(
 )]
 pub async fn delete_database(
     State(database_service): State<DatabaseServiceState>,
+    Extension(audit_service): Extension<Arc<AuditLogService>>,
+    headers: HeaderMap,
     auth_user: AuthUser,
     Path(id): Path<String>,
 ) -> AppResult<StatusCode> {
     database_service.delete(&id, auth_user.id()).await?;
+
+    audit_service.log(
+        auth_user.id().to_string(),
+        AuditAction::DeleteDatabase,
+        AuditEntityType::Database,
+        Some(id),
+        None,
+        AuditStatus::Success,
+        get_client_ip(&headers),
+        get_user_agent(&headers),
+    );
+
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -241,10 +309,24 @@ pub async fn delete_database(
 )]
 pub async fn start_database(
     State(database_service): State<DatabaseServiceState>,
+    Extension(audit_service): Extension<Arc<AuditLogService>>,
+    headers: HeaderMap,
     auth_user: AuthUser,
     Path(id): Path<String>,
 ) -> AppResult<Json<DatabaseResponse>> {
     let database = database_service.start(&id, auth_user.id()).await?;
+
+    audit_service.log(
+        auth_user.id().to_string(),
+        AuditAction::StartDatabase,
+        AuditEntityType::Database,
+        Some(id),
+        None,
+        AuditStatus::Success,
+        get_client_ip(&headers),
+        get_user_agent(&headers),
+    );
+
     Ok(Json(database))
 }
 
@@ -266,10 +348,24 @@ pub async fn start_database(
 )]
 pub async fn stop_database(
     State(database_service): State<DatabaseServiceState>,
+    Extension(audit_service): Extension<Arc<AuditLogService>>,
+    headers: HeaderMap,
     auth_user: AuthUser,
     Path(id): Path<String>,
 ) -> AppResult<Json<DatabaseResponse>> {
     let database = database_service.stop(&id, auth_user.id()).await?;
+
+    audit_service.log(
+        auth_user.id().to_string(),
+        AuditAction::StopDatabase,
+        AuditEntityType::Database,
+        Some(id),
+        None,
+        AuditStatus::Success,
+        get_client_ip(&headers),
+        get_user_agent(&headers),
+    );
+
     Ok(Json(database))
 }
 
@@ -317,6 +413,8 @@ pub async fn list_branches(
 )]
 pub async fn create_branch(
     State(database_service): State<DatabaseServiceState>,
+    Extension(audit_service): Extension<Arc<AuditLogService>>,
+    headers: HeaderMap,
     auth_user: AuthUser,
     Path(id): Path<String>,
     Json(payload): Json<CreateBranchRequest>,
@@ -324,6 +422,18 @@ pub async fn create_branch(
     let database = database_service
         .create_branch(&id, auth_user.id(), &payload.name, payload.include_data)
         .await?;
+
+    audit_service.log(
+        auth_user.id().to_string(),
+        AuditAction::CreateBranch,
+        AuditEntityType::Branch,
+        Some(database.id.clone()),
+        Some(serde_json::json!({ "name": payload.name, "parent_id": id })),
+        AuditStatus::Success,
+        get_client_ip(&headers),
+        get_user_agent(&headers),
+    );
+
     Ok((StatusCode::CREATED, Json(database)))
 }
 
@@ -345,11 +455,25 @@ pub async fn create_branch(
 )]
 pub async fn sync_from_parent(
     State(database_service): State<DatabaseServiceState>,
+    Extension(audit_service): Extension<Arc<AuditLogService>>,
+    headers: HeaderMap,
     auth_user: AuthUser,
     Path(id): Path<String>,
 ) -> AppResult<Json<DatabaseResponse>> {
     let database = database_service
         .sync_from_parent(&id, auth_user.id())
         .await?;
+
+    audit_service.log(
+        auth_user.id().to_string(),
+        AuditAction::SyncFromParent,
+        AuditEntityType::Branch,
+        Some(id),
+        None,
+        AuditStatus::Success,
+        get_client_ip(&headers),
+        get_user_agent(&headers),
+    );
+
     Ok(Json(database))
 }

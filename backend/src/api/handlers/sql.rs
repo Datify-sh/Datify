@@ -2,15 +2,32 @@ use std::sync::Arc;
 
 use axum::{
     extract::{Path, Query, State},
-    Json,
+    http::{header, HeaderMap},
+    Extension, Json,
 };
 
 use crate::api::extractors::AuthUser;
 use crate::domain::models::{
     ExecuteQueryRequest, QueryResult, SchemaInfo, TablePreview, TablePreviewQuery,
 };
-use crate::domain::services::SqlService;
+use crate::domain::models::{AuditAction, AuditEntityType, AuditStatus};
+use crate::domain::services::{AuditLogService, SqlService};
 use crate::error::{AppError, AppResult};
+
+fn get_client_ip(headers: &HeaderMap) -> Option<String> {
+    headers
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.split(',').next())
+        .map(|s| s.trim().to_string())
+}
+
+fn get_user_agent(headers: &HeaderMap) -> Option<String> {
+    headers
+        .get(header::USER_AGENT)
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string())
+}
 
 #[derive(Clone)]
 pub struct SqlState {
@@ -65,6 +82,8 @@ pub async fn get_database_schema(
 )]
 pub async fn execute_query(
     State(state): State<SqlState>,
+    Extension(audit_service): Extension<Arc<AuditLogService>>,
+    headers: HeaderMap,
     auth_user: AuthUser,
     Path(id): Path<String>,
     Json(request): Json<ExecuteQueryRequest>,
@@ -89,6 +108,21 @@ pub async fn execute_query(
         .sql_service
         .execute_query(&id, sql, limit, timeout_ms)
         .await?;
+
+    audit_service.log(
+        auth_user.id().to_string(),
+        AuditAction::ExecuteQuery,
+        AuditEntityType::Query,
+        Some(id),
+        Some(serde_json::json!({
+            "sql": sql,
+            "limit": limit,
+            "timeout_ms": timeout_ms,
+        })),
+        AuditStatus::Success,
+        get_client_ip(&headers),
+        get_user_agent(&headers),
+    );
 
     Ok(Json(result))
 }

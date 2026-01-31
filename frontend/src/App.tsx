@@ -1,6 +1,7 @@
 import { AuthLayout } from "@/components/layout/auth-layout";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { AuthProvider } from "@/contexts/auth-context";
+import { AuditLogsPage } from "@/pages/audit-logs";
 import { LoginPage } from "@/pages/auth/login";
 import { RegisterPage } from "@/pages/auth/register";
 import { DashboardPage } from "@/pages/dashboard";
@@ -42,6 +43,7 @@ export function App() {
                 <Route path="/projects" element={<ProjectsListPage />} />
                 <Route path="/projects/:id" element={<ProjectDetailPage />} />
                 <Route path="/databases/:id" element={<DatabaseDetailPage />} />
+                <Route path="/audit-logs" element={<AuditLogsPage />} />
               </Route>
             </Routes>
             <Toaster position="bottom-right" />

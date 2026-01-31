@@ -2,18 +2,33 @@ use std::sync::Arc;
 
 use axum::{
     extract::State,
-    http::{header, StatusCode},
+    http::{header, HeaderMap, StatusCode},
     response::{AppendHeaders, IntoResponse},
-    Json,
+    Extension, Json,
 };
 use axum_extra::extract::cookie::{Cookie, SameSite};
 use serde::Deserialize;
 use utoipa::ToSchema;
 
 use crate::api::extractors::AuthUser;
-use crate::domain::models::UserResponse;
-use crate::domain::services::{AuthService, AuthTokens, LoginResponse};
+use crate::domain::models::{AuditAction, AuditEntityType, AuditStatus, UserResponse};
+use crate::domain::services::{AuditLogService, AuthService, AuthTokens, LoginResponse};
 use crate::error::{AppError, AppResult};
+
+pub fn get_client_ip(headers: &HeaderMap) -> Option<String> {
+    headers
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.split(',').next())
+        .map(|s| s.trim().to_string())
+}
+
+pub fn get_user_agent(headers: &HeaderMap) -> Option<String> {
+    headers
+        .get(header::USER_AGENT)
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string())
+}
 
 pub type AuthServiceState = Arc<AuthService>;
 
@@ -49,11 +64,24 @@ pub struct RefreshRequest {
 )]
 pub async fn register(
     State(auth_service): State<AuthServiceState>,
+    Extension(audit_service): Extension<Arc<AuditLogService>>,
+    headers: HeaderMap,
     Json(payload): Json<RegisterRequest>,
 ) -> AppResult<impl IntoResponse> {
     let response = auth_service
         .register(&payload.email, &payload.password, &payload.name)
         .await?;
+
+    audit_service.log(
+        response.user.id.clone(),
+        AuditAction::Register,
+        AuditEntityType::User,
+        Some(response.user.id.clone()),
+        None,
+        AuditStatus::Success,
+        get_client_ip(&headers),
+        get_user_agent(&headers),
+    );
 
     let secure = auth_service.secure_cookies();
     let access_cookie = Cookie::build(("access_token", response.tokens.access_token.clone()))
@@ -92,11 +120,24 @@ pub async fn register(
 )]
 pub async fn login(
     State(auth_service): State<AuthServiceState>,
+    Extension(audit_service): Extension<Arc<AuditLogService>>,
+    headers: HeaderMap,
     Json(payload): Json<LoginRequest>,
 ) -> AppResult<impl IntoResponse> {
     let response = auth_service
         .login(&payload.email, &payload.password)
         .await?;
+
+    audit_service.log(
+        response.user.id.clone(),
+        AuditAction::Login,
+        AuditEntityType::User,
+        Some(response.user.id.clone()),
+        None,
+        AuditStatus::Success,
+        get_client_ip(&headers),
+        get_user_agent(&headers),
+    );
 
     let secure = auth_service.secure_cookies();
     let access_cookie = Cookie::build(("access_token", response.tokens.access_token.clone()))
@@ -225,12 +266,25 @@ pub struct LogoutRequest {
 )]
 pub async fn logout(
     State(auth_service): State<AuthServiceState>,
-    _auth_user: AuthUser,
+    Extension(audit_service): Extension<Arc<AuditLogService>>,
+    headers: HeaderMap,
+    auth_user: AuthUser,
     Json(payload): Json<LogoutRequest>,
 ) -> AppResult<impl IntoResponse> {
     if let Some(token) = payload.access_token {
         auth_service.logout(&token).await?;
     }
+
+    audit_service.log(
+        auth_user.id().to_string(),
+        AuditAction::Logout,
+        AuditEntityType::User,
+        Some(auth_user.id().to_string()),
+        None,
+        AuditStatus::Success,
+        get_client_ip(&headers),
+        get_user_agent(&headers),
+    );
 
     let secure = auth_service.secure_cookies();
     let clear_access = Cookie::build(("access_token", ""))

@@ -1,3 +1,4 @@
+mod audit_logs;
 mod auth;
 mod databases;
 mod health;
@@ -8,6 +9,7 @@ mod sql;
 mod system;
 mod terminal;
 
+pub use audit_logs::*;
 pub use auth::*;
 pub use databases::*;
 pub use health::*;

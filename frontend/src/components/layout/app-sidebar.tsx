@@ -36,6 +36,7 @@ import {
   Home01Icon,
   Logout01Icon,
   Moon02Icon,
+  NoteIcon,
   Settings01Icon,
   Sun03Icon,
 } from "@hugeicons/core-free-icons";
@@ -55,6 +56,11 @@ const mainNavItems = [
     title: "Projects",
     href: "/projects",
     icon: Folder01Icon,
+  },
+  {
+    title: "Audit Logs",
+    href: "/audit-logs",
+    icon: NoteIcon,
   },
 ];
 

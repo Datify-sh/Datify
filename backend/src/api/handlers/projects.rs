@@ -2,16 +2,32 @@ use std::sync::Arc;
 
 use axum::{
     extract::{Path, State},
-    http::StatusCode,
-    Json,
+    http::{header, HeaderMap, StatusCode},
+    Extension, Json,
 };
 
 use crate::api::extractors::{AuthUser, PaginatedResponse, Pagination};
 use crate::domain::models::{
-    CreateProjectRequest, ProjectResponse, ProjectWithStats, UpdateProjectRequest,
+    AuditAction, AuditEntityType, AuditStatus, CreateProjectRequest, ProjectResponse,
+    ProjectWithStats, UpdateProjectRequest,
 };
-use crate::domain::services::ProjectService;
+use crate::domain::services::{AuditLogService, ProjectService};
 use crate::error::{AppError, AppResult};
+
+fn get_client_ip(headers: &HeaderMap) -> Option<String> {
+    headers
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.split(',').next())
+        .map(|s| s.trim().to_string())
+}
+
+fn get_user_agent(headers: &HeaderMap) -> Option<String> {
+    headers
+        .get(header::USER_AGENT)
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string())
+}
 
 pub type ProjectServiceState = Arc<ProjectService>;
 
@@ -29,6 +45,8 @@ pub type ProjectServiceState = Arc<ProjectService>;
 )]
 pub async fn create_project(
     State(project_service): State<ProjectServiceState>,
+    Extension(audit_service): Extension<Arc<AuditLogService>>,
+    headers: HeaderMap,
     auth_user: AuthUser,
     Json(payload): Json<CreateProjectRequest>,
 ) -> AppResult<(StatusCode, Json<ProjectResponse>)> {
@@ -44,6 +62,17 @@ pub async fn create_project(
             settings.as_deref(),
         )
         .await?;
+
+    audit_service.log(
+        auth_user.id().to_string(),
+        AuditAction::CreateProject,
+        AuditEntityType::Project,
+        Some(project.id.clone()),
+        Some(serde_json::json!({ "name": project.name })),
+        AuditStatus::Success,
+        get_client_ip(&headers),
+        get_user_agent(&headers),
+    );
 
     Ok((StatusCode::CREATED, Json(project)))
 }
@@ -127,6 +156,8 @@ pub async fn get_project(
 )]
 pub async fn update_project(
     State(project_service): State<ProjectServiceState>,
+    Extension(audit_service): Extension<Arc<AuditLogService>>,
+    headers: HeaderMap,
     auth_user: AuthUser,
     Path(id): Path<String>,
     Json(payload): Json<UpdateProjectRequest>,
@@ -144,6 +175,17 @@ pub async fn update_project(
             settings.as_deref(),
         )
         .await?;
+
+    audit_service.log(
+        auth_user.id().to_string(),
+        AuditAction::UpdateProject,
+        AuditEntityType::Project,
+        Some(id),
+        None,
+        AuditStatus::Success,
+        get_client_ip(&headers),
+        get_user_agent(&headers),
+    );
 
     Ok(Json(project))
 }
@@ -165,9 +207,23 @@ pub async fn update_project(
 )]
 pub async fn delete_project(
     State(project_service): State<ProjectServiceState>,
+    Extension(audit_service): Extension<Arc<AuditLogService>>,
+    headers: HeaderMap,
     auth_user: AuthUser,
     Path(id): Path<String>,
 ) -> AppResult<StatusCode> {
     project_service.delete(&id, auth_user.id()).await?;
+
+    audit_service.log(
+        auth_user.id().to_string(),
+        AuditAction::DeleteProject,
+        AuditEntityType::Project,
+        Some(id),
+        None,
+        AuditStatus::Success,
+        get_client_ip(&headers),
+        get_user_agent(&headers),
+    );
+
     Ok(StatusCode::NO_CONTENT)
 }

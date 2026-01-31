@@ -55,6 +55,7 @@ use utoipa::OpenApi;
         crate::api::handlers::get_database_schema,
         crate::api::handlers::execute_query,
         crate::api::handlers::preview_table,
+        crate::api::handlers::list_audit_logs,
     ),
     components(schemas(
         crate::api::handlers::HealthResponse,
@@ -110,6 +111,10 @@ use utoipa::OpenApi;
         crate::domain::models::QueryResult,
         crate::domain::models::TablePreviewQuery,
         crate::domain::models::TablePreview,
+        crate::domain::models::AuditLogResponse,
+        crate::domain::models::AuditAction,
+        crate::domain::models::AuditEntityType,
+        crate::domain::models::AuditStatus,
     )),
     tags(
         (name = "Health", description = "Health check and system status endpoints"),
@@ -120,7 +125,8 @@ use utoipa::OpenApi;
         (name = "Logs", description = "Database container logs and streaming endpoints"),
         (name = "Terminal", description = "Interactive terminal and psql access endpoints"),
         (name = "Metrics", description = "Database metrics and query statistics endpoints"),
-        (name = "SQL", description = "SQL query execution and schema introspection endpoints")
+        (name = "SQL", description = "SQL query execution and schema introspection endpoints"),
+        (name = "Audit Logs", description = "Audit log retrieval endpoints")
     ),
     modifiers(&SecurityAddon)
 )]
