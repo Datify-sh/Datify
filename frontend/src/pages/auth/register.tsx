@@ -3,6 +3,7 @@ import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { useAuth } from "@/contexts/auth-context";
+import { getErrorMessage } from "@/lib/api";
 import * as React from "react";
 import { Link, useNavigate } from "react-router-dom";
 
@@ -39,7 +40,7 @@ export function RegisterPage() {
       await register({ name, email, password });
       navigate("/");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create account");
+      setError(getErrorMessage(err, "Failed to create account"));
     } finally {
       setIsLoading(false);
     }

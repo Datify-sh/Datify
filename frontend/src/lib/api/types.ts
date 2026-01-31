@@ -230,6 +230,18 @@ export interface RedisVersionsResponse {
 export interface ApiError {
   message: string;
   status: number;
+  code?: string;
+  details?: unknown;
+}
+
+export function getErrorMessage(error: unknown, fallback = "An error occurred"): string {
+  if (error && typeof error === "object" && "message" in error) {
+    return (error as { message: string }).message || fallback;
+  }
+  if (error instanceof Error) {
+    return error.message || fallback;
+  }
+  return fallback;
 }
 
 export type TimeRange =

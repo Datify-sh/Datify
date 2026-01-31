@@ -12,7 +12,7 @@ import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Spinner } from "@/components/ui/spinner";
-import { databasesApi } from "@/lib/api";
+import { databasesApi, getErrorMessage } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import {
   Database01Icon,
@@ -88,9 +88,8 @@ export function CreateBranchDialog({
         navigate(`/databases/${branchId}`);
       }, 150);
     },
-    onError: (error: { message?: string | { message?: string } }) => {
-      const msg = typeof error.message === "string" ? error.message : error.message?.message;
-      toast.error(msg || "Failed to create branch");
+    onError: (err) => {
+      toast.error(getErrorMessage(err, "Failed to create branch"));
       setProgress(0);
     },
   });

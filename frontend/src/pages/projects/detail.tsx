@@ -33,6 +33,7 @@ import {
   type DatabaseResponse,
   type DatabaseType,
   databasesApi,
+  getErrorMessage,
   projectsApi,
   systemApi,
 } from "@/lib/api";
@@ -93,9 +94,9 @@ function DatabaseRow({
       queryClient.invalidateQueries({ queryKey: ["all-databases-for-stats"] });
       toast.success("Database started");
     },
-    onError: () => {
+    onError: (err) => {
       queryClient.invalidateQueries({ queryKey: ["databases", database.project_id] });
-      toast.error("Failed to start database");
+      toast.error(getErrorMessage(err, "Failed to start database"));
     },
   });
 
@@ -121,9 +122,9 @@ function DatabaseRow({
       queryClient.invalidateQueries({ queryKey: ["all-databases-for-stats"] });
       toast.success("Database stopped");
     },
-    onError: () => {
+    onError: (err) => {
       queryClient.invalidateQueries({ queryKey: ["databases", database.project_id] });
-      toast.error("Failed to stop database");
+      toast.error(getErrorMessage(err, "Failed to stop database"));
     },
   });
 
@@ -135,7 +136,7 @@ function DatabaseRow({
       queryClient.invalidateQueries({ queryKey: ["all-databases-for-stats"] });
       toast.success("Database deleted");
     },
-    onError: () => toast.error("Failed to delete database"),
+    onError: (err) => toast.error(getErrorMessage(err, "Failed to delete database")),
   });
 
   const copyConnectionString = (e: React.MouseEvent) => {
@@ -363,7 +364,7 @@ export function ProjectDetailPage() {
       setDatabaseType("postgres");
       toast.success("Database created");
     },
-    onError: () => toast.error("Failed to create database"),
+    onError: (err) => toast.error(getErrorMessage(err, "Failed to create database")),
   });
 
   const handleCreateDatabase = (e: React.FormEvent<HTMLFormElement>) => {

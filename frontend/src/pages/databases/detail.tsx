@@ -28,7 +28,13 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useLogStream } from "@/hooks/use-log-stream";
 import { useMetricsStream } from "@/hooks/use-metrics-stream";
-import { type UpdateDatabaseRequest, databasesApi, projectsApi, systemApi } from "@/lib/api";
+import {
+  type UpdateDatabaseRequest,
+  databasesApi,
+  getErrorMessage,
+  projectsApi,
+  systemApi,
+} from "@/lib/api";
 import {
   ArrowDownIcon,
   BarChartIcon,
@@ -372,7 +378,7 @@ const SettingsPanel = React.memo(function SettingsPanel({
       queryClient.invalidateQueries({ queryKey: ["database", database.id] });
       toast.success("Settings saved");
     },
-    onError: () => toast.error("Failed to save settings"),
+    onError: (err) => toast.error(getErrorMessage(err, "Failed to save settings")),
   });
 
   const handleSave = React.useCallback(() => {
@@ -595,9 +601,9 @@ export function DatabaseDetailPage() {
       queryClient.invalidateQueries({ queryKey: ["all-databases-for-stats"] });
       toast.success("Database starting...");
     },
-    onError: () => {
+    onError: (err) => {
       queryClient.invalidateQueries({ queryKey: ["database", id] });
-      toast.error("Failed to start database");
+      toast.error(getErrorMessage(err, "Failed to start database"));
     },
   });
 
@@ -619,9 +625,9 @@ export function DatabaseDetailPage() {
       queryClient.invalidateQueries({ queryKey: ["all-databases-for-stats"] });
       toast.success("Database stopping...");
     },
-    onError: () => {
+    onError: (err) => {
       queryClient.invalidateQueries({ queryKey: ["database", id] });
-      toast.error("Failed to stop database");
+      toast.error(getErrorMessage(err, "Failed to stop database"));
     },
   });
 
@@ -640,7 +646,7 @@ export function DatabaseDetailPage() {
       toast.success("Database deleted");
       navigate(`/projects/${projectId}`);
     },
-    onError: () => toast.error("Failed to delete database"),
+    onError: (err) => toast.error(getErrorMessage(err, "Failed to delete database")),
   });
 
   const syncMutation = useMutation({
@@ -655,7 +661,7 @@ export function DatabaseDetailPage() {
       }
       toast.success("Synced from parent successfully");
     },
-    onError: () => toast.error("Failed to sync from parent"),
+    onError: (err) => toast.error(getErrorMessage(err, "Failed to sync from parent")),
   });
 
   if (isLoading || !database) {

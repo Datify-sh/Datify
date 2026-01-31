@@ -12,7 +12,7 @@ import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
-import { projectsApi } from "@/lib/api";
+import { getErrorMessage, projectsApi } from "@/lib/api";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
@@ -37,7 +37,7 @@ export function CreateProjectDialog({ open, onOpenChange }: CreateProjectDialogP
       navigate(`/projects/${project.id}`);
     },
     onError: (err) => {
-      setError(err instanceof Error ? err.message : "Failed to create project");
+      setError(getErrorMessage(err, "Failed to create project"));
     },
   });
 

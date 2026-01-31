@@ -76,10 +76,15 @@ class ApiClient {
       };
       try {
         const data = await response.json();
-        const msg = data.message || data.error || response.statusText;
-        error.message = typeof msg === "string" ? msg : msg?.message || response.statusText;
+        if (data.error && typeof data.error === "object") {
+          error.message = data.error.message || response.statusText;
+          error.code = data.error.code;
+          error.details = data.error.details;
+        } else {
+          error.message = data.message || data.error || response.statusText;
+        }
       } catch {
-        /* ignore */
+        // Response body is not JSON
       }
       throw error;
     }

@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { projectsApi } from "@/lib/api";
+import { getErrorMessage, projectsApi } from "@/lib/api";
 import {
   Add01Icon,
   Database01Icon,
@@ -60,7 +60,7 @@ export function ProjectsListPage() {
       toast.success("Project deleted");
       setDeleteProject(null);
     },
-    onError: () => toast.error("Failed to delete project"),
+    onError: (err) => toast.error(getErrorMessage(err, "Failed to delete project")),
   });
 
   const searchLower = search.toLowerCase();

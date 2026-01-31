@@ -15,7 +15,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { type BranchResponse, databasesApi } from "@/lib/api";
+import { type BranchResponse, databasesApi, getErrorMessage } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import {
   Add01Icon,
@@ -66,7 +66,7 @@ export function BranchPanel({ databaseId, currentBranchId, onCreateBranch }: Bra
       queryClient.removeQueries({ queryKey: ["database", deletedBranchId] });
       toast.success("Branch deleted");
     },
-    onError: () => toast.error("Failed to delete branch"),
+    onError: (err) => toast.error(getErrorMessage(err, "Failed to delete branch")),
   });
 
   if (isLoading) {
