@@ -105,6 +105,7 @@ impl DatabaseService {
         &self,
         project_id: &str,
         user_id: &str,
+        is_admin: bool,
         name: &str,
         database_type: &str,
         postgres_version: &str,
@@ -116,7 +117,7 @@ impl DatabaseService {
         memory_limit_mb: i32,
         storage_limit_mb: i32,
     ) -> AppResult<DatabaseResponse> {
-        if !self.project_repo.is_owner(project_id, user_id).await? {
+        if !is_admin && !self.project_repo.is_owner(project_id, user_id).await? {
             return Err(AppError::Forbidden);
         }
 
@@ -320,10 +321,11 @@ impl DatabaseService {
         &self,
         project_id: &str,
         user_id: &str,
+        is_admin: bool,
         limit: i64,
         offset: i64,
     ) -> AppResult<Vec<DatabaseResponse>> {
-        if !self.project_repo.is_owner(project_id, user_id).await? {
+        if !is_admin && !self.project_repo.is_owner(project_id, user_id).await? {
             return Err(AppError::Forbidden);
         }
 
@@ -349,6 +351,7 @@ impl DatabaseService {
         &self,
         id: &str,
         user_id: &str,
+        is_admin: bool,
         name: Option<&str>,
         cpu_limit: Option<f64>,
         memory_limit_mb: Option<i32>,
@@ -361,10 +364,11 @@ impl DatabaseService {
             .await?
             .ok_or_else(|| AppError::NotFound(format!("Database '{}' not found", id)))?;
 
-        if !self
-            .project_repo
-            .is_owner(&database.project_id, user_id)
-            .await?
+        if !is_admin
+            && !self
+                .project_repo
+                .is_owner(&database.project_id, user_id)
+                .await?
         {
             return Err(AppError::Forbidden);
         }
@@ -569,6 +573,7 @@ impl DatabaseService {
         &self,
         id: &str,
         user_id: &str,
+        is_admin: bool,
         current_password: &str,
         new_password: &str,
     ) -> AppResult<DatabaseResponse> {
@@ -578,10 +583,11 @@ impl DatabaseService {
             .await?
             .ok_or_else(|| AppError::NotFound(format!("Database '{}' not found", id)))?;
 
-        if !self
-            .project_repo
-            .is_owner(&database.project_id, user_id)
-            .await?
+        if !is_admin
+            && !self
+                .project_repo
+                .is_owner(&database.project_id, user_id)
+                .await?
         {
             return Err(AppError::Forbidden);
         }
@@ -621,17 +627,18 @@ impl DatabaseService {
             .ok_or_else(|| AppError::NotFound(format!("Database '{}' not found", id)))
     }
 
-    pub async fn delete(&self, id: &str, user_id: &str) -> AppResult<()> {
+    pub async fn delete(&self, id: &str, user_id: &str, is_admin: bool) -> AppResult<()> {
         let database = self
             .database_repo
             .find_by_id(id)
             .await?
             .ok_or_else(|| AppError::NotFound(format!("Database '{}' not found", id)))?;
 
-        if !self
-            .project_repo
-            .is_owner(&database.project_id, user_id)
-            .await?
+        if !is_admin
+            && !self
+                .project_repo
+                .is_owner(&database.project_id, user_id)
+                .await?
         {
             return Err(AppError::Forbidden);
         }
@@ -649,17 +656,23 @@ impl DatabaseService {
         self.database_repo.delete(id).await
     }
 
-    pub async fn start(&self, id: &str, user_id: &str) -> AppResult<DatabaseResponse> {
+    pub async fn start(
+        &self,
+        id: &str,
+        user_id: &str,
+        is_admin: bool,
+    ) -> AppResult<DatabaseResponse> {
         let database = self
             .database_repo
             .find_by_id(id)
             .await?
             .ok_or_else(|| AppError::NotFound(format!("Database '{}' not found", id)))?;
 
-        if !self
-            .project_repo
-            .is_owner(&database.project_id, user_id)
-            .await?
+        if !is_admin
+            && !self
+                .project_repo
+                .is_owner(&database.project_id, user_id)
+                .await?
         {
             return Err(AppError::Forbidden);
         }
@@ -677,17 +690,23 @@ impl DatabaseService {
             .ok_or_else(|| AppError::NotFound(format!("Database '{}' not found", id)))
     }
 
-    pub async fn stop(&self, id: &str, user_id: &str) -> AppResult<DatabaseResponse> {
+    pub async fn stop(
+        &self,
+        id: &str,
+        user_id: &str,
+        is_admin: bool,
+    ) -> AppResult<DatabaseResponse> {
         let database = self
             .database_repo
             .find_by_id(id)
             .await?
             .ok_or_else(|| AppError::NotFound(format!("Database '{}' not found", id)))?;
 
-        if !self
-            .project_repo
-            .is_owner(&database.project_id, user_id)
-            .await?
+        if !is_admin
+            && !self
+                .project_repo
+                .is_owner(&database.project_id, user_id)
+                .await?
         {
             return Err(AppError::Forbidden);
         }
@@ -713,7 +732,15 @@ impl DatabaseService {
         self.database_repo.count_by_project(project_id).await
     }
 
-    pub async fn check_access(&self, database_id: &str, user_id: &str) -> AppResult<bool> {
+    pub async fn check_access(
+        &self,
+        database_id: &str,
+        user_id: &str,
+        is_admin: bool,
+    ) -> AppResult<bool> {
+        if is_admin {
+            return Ok(true);
+        }
         let project_id = self
             .database_repo
             .get_project_id(database_id)
@@ -727,10 +754,11 @@ impl DatabaseService {
         &self,
         database_id: &str,
         user_id: &str,
+        is_admin: bool,
         command: &str,
         timeout_ms: Option<i32>,
     ) -> AppResult<KvCommandResult> {
-        if !self.check_access(database_id, user_id).await? {
+        if !self.check_access(database_id, user_id, is_admin).await? {
             return Err(AppError::Forbidden);
         }
 
@@ -844,8 +872,9 @@ impl DatabaseService {
         &self,
         database_id: &str,
         user_id: &str,
+        is_admin: bool,
     ) -> AppResult<Vec<BranchResponse>> {
-        if !self.check_access(database_id, user_id).await? {
+        if !self.check_access(database_id, user_id, is_admin).await? {
             return Err(AppError::Forbidden);
         }
 
@@ -860,6 +889,7 @@ impl DatabaseService {
         &self,
         database_id: &str,
         user_id: &str,
+        is_admin: bool,
         branch_name: &str,
         include_data: bool,
     ) -> AppResult<DatabaseResponse> {
@@ -869,10 +899,11 @@ impl DatabaseService {
             .await?
             .ok_or_else(|| AppError::NotFound(format!("Database '{}' not found", database_id)))?;
 
-        if !self
-            .project_repo
-            .is_owner(&source.project_id, user_id)
-            .await?
+        if !is_admin
+            && !self
+                .project_repo
+                .is_owner(&source.project_id, user_id)
+                .await?
         {
             return Err(AppError::Forbidden);
         }
@@ -1101,6 +1132,7 @@ impl DatabaseService {
         &self,
         database_id: &str,
         user_id: &str,
+        is_admin: bool,
     ) -> AppResult<DatabaseResponse> {
         let branch = self
             .database_repo
@@ -1108,10 +1140,11 @@ impl DatabaseService {
             .await?
             .ok_or_else(|| AppError::NotFound(format!("Database '{}' not found", database_id)))?;
 
-        if !self
-            .project_repo
-            .is_owner(&branch.project_id, user_id)
-            .await?
+        if !is_admin
+            && !self
+                .project_repo
+                .is_owner(&branch.project_id, user_id)
+                .await?
         {
             return Err(AppError::Forbidden);
         }
@@ -1203,8 +1236,9 @@ impl DatabaseService {
         &self,
         database_id: &str,
         user_id: &str,
+        is_admin: bool,
     ) -> AppResult<DatabaseConfigResponse> {
-        if !self.check_access(database_id, user_id).await? {
+        if !self.check_access(database_id, user_id, is_admin).await? {
             return Err(AppError::Forbidden);
         }
 
@@ -1287,9 +1321,10 @@ impl DatabaseService {
         &self,
         database_id: &str,
         user_id: &str,
+        is_admin: bool,
         content: &str,
     ) -> AppResult<UpdateDatabaseConfigResponse> {
-        if !self.check_access(database_id, user_id).await? {
+        if !self.check_access(database_id, user_id, is_admin).await? {
             return Err(AppError::Forbidden);
         }
 

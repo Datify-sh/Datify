@@ -6,6 +6,7 @@ pub mod infrastructure;
 pub mod middleware;
 pub mod openapi;
 pub mod repositories;
+pub mod utils;
 
 pub use api::create_router;
 pub use config::Settings;

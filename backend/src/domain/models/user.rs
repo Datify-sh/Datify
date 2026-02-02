@@ -32,7 +32,7 @@ impl TryFrom<&str> for UserRole {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
 pub struct User {
     pub id: String,
     pub email: String,

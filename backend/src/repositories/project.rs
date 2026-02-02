@@ -92,6 +92,22 @@ impl ProjectRepository {
         Ok(projects)
     }
 
+    pub async fn find_all(&self, limit: i64, offset: i64) -> AppResult<Vec<Project>> {
+        let projects = sqlx::query_as::<_, Project>(
+            r#"
+            SELECT * FROM projects
+            ORDER BY created_at DESC
+            LIMIT ? OFFSET ?
+            "#,
+        )
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(projects)
+    }
+
     pub async fn update(
         &self,
         id: &str,
@@ -197,6 +213,14 @@ impl ProjectRepository {
     pub async fn count_by_user(&self, user_id: &str) -> AppResult<i64> {
         let count: (i64,) = sqlx::query_as(r#"SELECT COUNT(*) FROM projects WHERE user_id = ?"#)
             .bind(user_id)
+            .fetch_one(&self.pool)
+            .await?;
+
+        Ok(count.0)
+    }
+
+    pub async fn count_all(&self) -> AppResult<i64> {
+        let count: (i64,) = sqlx::query_as(r#"SELECT COUNT(*) FROM projects"#)
             .fetch_one(&self.pool)
             .await?;
 

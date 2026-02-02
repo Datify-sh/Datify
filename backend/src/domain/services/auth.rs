@@ -1,9 +1,5 @@
 use std::sync::Arc;
 
-use argon2::{
-    password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
-    Argon2,
-};
 use chrono::{DateTime, Duration, Utc};
 use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
@@ -79,9 +75,12 @@ impl AuthService {
             )));
         }
 
-        let password_hash = self.hash_password(password)?;
+        let password_hash = self.hash_password(password).await?;
 
-        let user = self.user_repo.create(email, &password_hash, "user").await?;
+        let count = self.user_repo.count().await?;
+        let role = if count == 0 { "admin" } else { "user" };
+
+        let user = self.user_repo.create(email, &password_hash, role).await?;
 
         let tokens = self.generate_tokens(&user)?;
 
@@ -270,23 +269,11 @@ impl AuthService {
         Ok(token_data.claims)
     }
 
-    fn hash_password(&self, password: &str) -> AppResult<String> {
-        let salt = SaltString::generate(&mut OsRng);
-        let argon2 = Argon2::default();
-
-        let hash = argon2
-            .hash_password(password.as_bytes(), &salt)
-            .map_err(|e| AppError::Internal(format!("Password hashing failed: {}", e)))?;
-
-        Ok(hash.to_string())
+    async fn hash_password(&self, password: &str) -> AppResult<String> {
+        crate::utils::hash::hash_password(password).await
     }
 
     fn verify_password(&self, password: &str, hash: &str) -> AppResult<bool> {
-        let parsed_hash = PasswordHash::new(hash)
-            .map_err(|e| AppError::Internal(format!("Invalid password hash: {}", e)))?;
-
-        Ok(Argon2::default()
-            .verify_password(password.as_bytes(), &parsed_hash)
-            .is_ok())
+        crate::utils::hash::verify_password(password, hash)
     }
 }

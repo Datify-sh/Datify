@@ -96,11 +96,21 @@ pub async fn list_projects(
     auth_user: AuthUser,
     pagination: Pagination,
 ) -> AppResult<Json<PaginatedResponse<ProjectWithStats>>> {
-    let projects = project_service
-        .list_by_user_with_stats(auth_user.id(), pagination.limit, pagination.offset)
-        .await?;
-
-    let total = project_service.count_by_user(auth_user.id()).await?;
+    let (projects, total) = if auth_user.is_admin() {
+        (
+            project_service
+                .list_all_with_stats(pagination.limit, pagination.offset)
+                .await?,
+            project_service.count_all().await?,
+        )
+    } else {
+        (
+            project_service
+                .list_by_user_with_stats(auth_user.id(), pagination.limit, pagination.offset)
+                .await?,
+            project_service.count_by_user(auth_user.id()).await?,
+        )
+    };
 
     Ok(Json(PaginatedResponse::new(projects, &pagination, total)))
 }
@@ -130,7 +140,7 @@ pub async fn get_project(
         .await?
         .ok_or_else(|| AppError::NotFound(format!("Project '{}' not found", id)))?;
 
-    if !project_service.is_owner(&id, auth_user.id()).await? {
+    if !auth_user.is_admin() && !project_service.is_owner(&id, auth_user.id()).await? {
         return Err(AppError::Forbidden);
     }
 
@@ -170,6 +180,7 @@ pub async fn update_project(
         .update(
             &id,
             auth_user.id(),
+            auth_user.is_admin(),
             payload.name.as_deref(),
             payload.description.as_deref(),
             settings.as_deref(),
@@ -212,7 +223,9 @@ pub async fn delete_project(
     auth_user: AuthUser,
     Path(id): Path<String>,
 ) -> AppResult<StatusCode> {
-    project_service.delete(&id, auth_user.id()).await?;
+    project_service
+        .delete(&id, auth_user.id(), auth_user.is_admin())
+        .await?;
 
     audit_service.log(
         auth_user.id().to_string(),

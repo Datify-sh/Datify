@@ -59,6 +59,7 @@ pub async fn create_database(
         .create(
             &project_id,
             auth_user.id(),
+            auth_user.is_admin(),
             &payload.name,
             &payload.database_type,
             &payload.postgres_version,
@@ -112,6 +113,7 @@ pub async fn list_databases(
         .list_by_project(
             &project_id,
             auth_user.id(),
+            auth_user.is_admin(),
             pagination.limit,
             pagination.offset,
         )
@@ -142,7 +144,10 @@ pub async fn get_database(
     auth_user: AuthUser,
     Path(id): Path<String>,
 ) -> AppResult<Json<DatabaseResponse>> {
-    if !database_service.check_access(&id, auth_user.id()).await? {
+    if !database_service
+        .check_access(&id, auth_user.id(), auth_user.is_admin())
+        .await?
+    {
         return Err(AppError::Forbidden);
     }
 
@@ -183,6 +188,7 @@ pub async fn update_database(
         .update(
             &id,
             auth_user.id(),
+            auth_user.is_admin(),
             payload.name.as_deref(),
             payload.cpu_limit,
             payload.memory_limit_mb,
@@ -235,6 +241,7 @@ pub async fn change_database_password(
         .change_password(
             &id,
             auth_user.id(),
+            auth_user.is_admin(),
             &payload.current_password,
             &payload.new_password,
         )
@@ -276,7 +283,9 @@ pub async fn delete_database(
     auth_user: AuthUser,
     Path(id): Path<String>,
 ) -> AppResult<StatusCode> {
-    database_service.delete(&id, auth_user.id()).await?;
+    database_service
+        .delete(&id, auth_user.id(), auth_user.is_admin())
+        .await?;
 
     audit_service.log(
         auth_user.id().to_string(),
@@ -315,7 +324,9 @@ pub async fn start_database(
     auth_user: AuthUser,
     Path(id): Path<String>,
 ) -> AppResult<Json<DatabaseResponse>> {
-    let database = database_service.start(&id, auth_user.id()).await?;
+    let database = database_service
+        .start(&id, auth_user.id(), auth_user.is_admin())
+        .await?;
 
     audit_service.log(
         auth_user.id().to_string(),
@@ -354,7 +365,9 @@ pub async fn stop_database(
     auth_user: AuthUser,
     Path(id): Path<String>,
 ) -> AppResult<Json<DatabaseResponse>> {
-    let database = database_service.stop(&id, auth_user.id()).await?;
+    let database = database_service
+        .stop(&id, auth_user.id(), auth_user.is_admin())
+        .await?;
 
     audit_service.log(
         auth_user.id().to_string(),
@@ -390,7 +403,9 @@ pub async fn list_branches(
     auth_user: AuthUser,
     Path(id): Path<String>,
 ) -> AppResult<Json<Vec<BranchResponse>>> {
-    let branches = database_service.list_branches(&id, auth_user.id()).await?;
+    let branches = database_service
+        .list_branches(&id, auth_user.id(), auth_user.is_admin())
+        .await?;
     Ok(Json(branches))
 }
 
@@ -421,7 +436,13 @@ pub async fn create_branch(
     Json(payload): Json<CreateBranchRequest>,
 ) -> AppResult<(StatusCode, Json<DatabaseResponse>)> {
     let database = database_service
-        .create_branch(&id, auth_user.id(), &payload.name, payload.include_data)
+        .create_branch(
+            &id,
+            auth_user.id(),
+            auth_user.is_admin(),
+            &payload.name,
+            payload.include_data,
+        )
         .await?;
 
     audit_service.log(
@@ -462,7 +483,7 @@ pub async fn sync_from_parent(
     Path(id): Path<String>,
 ) -> AppResult<Json<DatabaseResponse>> {
     let database = database_service
-        .sync_from_parent(&id, auth_user.id())
+        .sync_from_parent(&id, auth_user.id(), auth_user.is_admin())
         .await?;
 
     audit_service.log(

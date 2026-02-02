@@ -90,6 +90,11 @@ impl ProjectService {
         Ok(projects.into_iter().map(|p| p.into()).collect())
     }
 
+    pub async fn list_all(&self, limit: i64, offset: i64) -> AppResult<Vec<ProjectResponse>> {
+        let projects = self.project_repo.find_all(limit, offset).await?;
+        Ok(projects.into_iter().map(|p| p.into()).collect())
+    }
+
     pub async fn list_by_user_with_stats(
         &self,
         user_id: &str,
@@ -115,15 +120,37 @@ impl ProjectService {
         Ok(results)
     }
 
+    pub async fn list_all_with_stats(
+        &self,
+        limit: i64,
+        offset: i64,
+    ) -> AppResult<Vec<ProjectWithStats>> {
+        let projects = self.project_repo.find_all(limit, offset).await?;
+
+        let mut results = Vec::with_capacity(projects.len());
+
+        for project in projects {
+            let database_count = self.database_repo.count_by_project(&project.id).await?;
+
+            results.push(ProjectWithStats {
+                project: project.into(),
+                database_count,
+            });
+        }
+
+        Ok(results)
+    }
+
     pub async fn update(
         &self,
         id: &str,
         user_id: &str,
+        is_admin: bool,
         name: Option<&str>,
         description: Option<&str>,
         settings: Option<&str>,
     ) -> AppResult<ProjectResponse> {
-        if !self.project_repo.is_owner(id, user_id).await? {
+        if !is_admin && !self.project_repo.is_owner(id, user_id).await? {
             return Err(AppError::Forbidden);
         }
 
@@ -148,8 +175,8 @@ impl ProjectService {
         Ok(project.into())
     }
 
-    pub async fn delete(&self, id: &str, user_id: &str) -> AppResult<()> {
-        if !self.project_repo.is_owner(id, user_id).await? {
+    pub async fn delete(&self, id: &str, user_id: &str, is_admin: bool) -> AppResult<()> {
+        if !is_admin && !self.project_repo.is_owner(id, user_id).await? {
             return Err(AppError::Forbidden);
         }
 
@@ -162,5 +189,9 @@ impl ProjectService {
 
     pub async fn count_by_user(&self, user_id: &str) -> AppResult<i64> {
         self.project_repo.count_by_user(user_id).await
+    }
+
+    pub async fn count_all(&self) -> AppResult<i64> {
+        self.project_repo.count_all().await
     }
 }

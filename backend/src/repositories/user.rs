@@ -65,39 +65,46 @@ impl UserRepository {
         id: &str,
         email: Option<&str>,
         password_hash: Option<&str>,
+        role: Option<&str>,
     ) -> AppResult<User> {
-        if email.is_none() && password_hash.is_none() {
+        if email.is_none() && password_hash.is_none() && role.is_none() {
             return self
                 .find_by_id(id)
                 .await?
                 .ok_or_else(|| AppError::NotFound(format!("User with id '{}' not found", id)));
         }
 
-        let result = match (email, password_hash) {
-            (Some(e), None) => {
-                sqlx::query("UPDATE users SET email = ? WHERE id = ?")
-                    .bind(e)
-                    .bind(id)
-                    .execute(&self.pool)
-                    .await?
-            },
-            (None, Some(p)) => {
-                sqlx::query("UPDATE users SET password_hash = ? WHERE id = ?")
-                    .bind(p)
-                    .bind(id)
-                    .execute(&self.pool)
-                    .await?
-            },
-            (Some(e), Some(p)) => {
-                sqlx::query("UPDATE users SET email = ?, password_hash = ? WHERE id = ?")
-                    .bind(e)
-                    .bind(p)
-                    .bind(id)
-                    .execute(&self.pool)
-                    .await?
-            },
-            (None, None) => unreachable!(),
-        };
+        let mut query = "UPDATE users SET ".to_string();
+        let mut updates = Vec::new();
+
+        if email.is_some() {
+            updates.push("email = ?");
+        }
+        if password_hash.is_some() {
+            updates.push("password_hash = ?");
+        }
+        if role.is_some() {
+            updates.push("role = ?");
+        }
+
+        query.push_str(&updates.join(", "));
+        query.push_str(" WHERE id = ?");
+
+        let mut query_builder = sqlx::query(&query);
+
+        if let Some(e) = email {
+            query_builder = query_builder.bind(e);
+        }
+        if let Some(p) = password_hash {
+            query_builder = query_builder.bind(p);
+        }
+        if let Some(r) = role {
+            query_builder = query_builder.bind(r);
+        }
+
+        query_builder = query_builder.bind(id);
+
+        let result = query_builder.execute(&self.pool).await?;
 
         if result.rows_affected() == 0 {
             return Err(AppError::NotFound(format!(

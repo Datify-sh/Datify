@@ -66,7 +66,11 @@ pub async fn get_database_schema(
     auth_user: AuthUser,
     Path(id): Path<String>,
 ) -> AppResult<Json<SchemaInfo>> {
-    if !state.sql_service.check_access(&id, auth_user.id()).await? {
+    if !state
+        .sql_service
+        .check_access(&id, auth_user.id(), auth_user.is_admin())
+        .await?
+    {
         return Err(AppError::Forbidden);
     }
 
@@ -99,7 +103,11 @@ pub async fn execute_query(
     Path(id): Path<String>,
     Json(request): Json<ExecuteQueryRequest>,
 ) -> AppResult<Json<QueryResult>> {
-    if !state.sql_service.check_access(&id, auth_user.id()).await? {
+    if !state
+        .sql_service
+        .check_access(&id, auth_user.id(), auth_user.is_admin())
+        .await?
+    {
         return Err(AppError::Forbidden);
     }
 
@@ -160,7 +168,11 @@ pub async fn preview_table(
     Path((id, schema, table)): Path<(String, String, String)>,
     Query(query): Query<TablePreviewQuery>,
 ) -> AppResult<Json<TablePreview>> {
-    if !state.sql_service.check_access(&id, auth_user.id()).await? {
+    if !state
+        .sql_service
+        .check_access(&id, auth_user.id(), auth_user.is_admin())
+        .await?
+    {
         return Err(AppError::Forbidden);
     }
 

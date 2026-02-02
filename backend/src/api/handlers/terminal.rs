@@ -50,7 +50,7 @@ pub async fn database_terminal(
 ) -> Result<impl IntoResponse, AppError> {
     if !state
         .database_service
-        .check_access(&id, auth_user.id())
+        .check_access(&id, auth_user.id(), auth_user.is_admin())
         .await?
     {
         return Err(AppError::Forbidden);
@@ -278,7 +278,7 @@ pub async fn database_psql(
 ) -> Result<impl IntoResponse, AppError> {
     if !state
         .database_service
-        .check_access(&id, auth_user.id())
+        .check_access(&id, auth_user.id(), auth_user.is_admin())
         .await?
     {
         return Err(AppError::Forbidden);
@@ -340,7 +340,7 @@ pub async fn database_valkey_cli(
 ) -> Result<impl IntoResponse, AppError> {
     if !state
         .database_service
-        .check_access(&id, auth_user.id())
+        .check_access(&id, auth_user.id(), auth_user.is_admin())
         .await?
     {
         return Err(AppError::Forbidden);
@@ -430,7 +430,7 @@ pub async fn database_redis_cli(
 ) -> Result<impl IntoResponse, AppError> {
     if !state
         .database_service
-        .check_access(&id, auth_user.id())
+        .check_access(&id, auth_user.id(), auth_user.is_admin())
         .await?
     {
         return Err(AppError::Forbidden);

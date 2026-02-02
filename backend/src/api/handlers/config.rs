@@ -30,7 +30,9 @@ pub async fn get_database_config(
     auth_user: AuthUser,
     Path(id): Path<String>,
 ) -> AppResult<Json<DatabaseConfigResponse>> {
-    let config = database_service.get_config(&id, auth_user.id()).await?;
+    let config = database_service
+        .get_config(&id, auth_user.id(), auth_user.is_admin())
+        .await?;
     Ok(Json(config))
 }
 
@@ -58,7 +60,7 @@ pub async fn update_database_config(
     Json(payload): Json<UpdateDatabaseConfigRequest>,
 ) -> AppResult<Json<UpdateDatabaseConfigResponse>> {
     let response = database_service
-        .update_config(&id, auth_user.id(), &payload.content)
+        .update_config(&id, auth_user.id(), auth_user.is_admin(), &payload.content)
         .await?;
     Ok(Json(response))
 }

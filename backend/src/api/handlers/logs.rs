@@ -50,7 +50,7 @@ pub async fn get_database_logs(
 ) -> AppResult<Json<LogsResponse>> {
     if !state
         .database_service
-        .check_access(&id, auth_user.id())
+        .check_access(&id, auth_user.id(), auth_user.is_admin())
         .await?
     {
         return Err(AppError::Forbidden);
@@ -121,7 +121,7 @@ pub async fn stream_database_logs(
 ) -> Result<impl IntoResponse, AppError> {
     if !state
         .database_service
-        .check_access(&id, auth_user.id())
+        .check_access(&id, auth_user.id(), auth_user.is_admin())
         .await?
     {
         return Err(AppError::Forbidden);

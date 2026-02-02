@@ -70,7 +70,13 @@ pub async fn execute_kv_command(
     Json(payload): Json<ExecuteKvCommandRequest>,
 ) -> AppResult<Json<KvCommandResult>> {
     let result = database_service
-        .execute_kv_command(&id, auth_user.id(), &payload.command, payload.timeout_ms)
+        .execute_kv_command(
+            &id,
+            auth_user.id(),
+            auth_user.is_admin(),
+            &payload.command,
+            payload.timeout_ms,
+        )
         .await?;
 
     audit_service.log(

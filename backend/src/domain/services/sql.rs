@@ -68,7 +68,15 @@ impl SqlService {
             .map_err(|e| AppError::Internal(format!("Invalid UTF-8 in password: {}", e)))
     }
 
-    pub async fn check_access(&self, database_id: &str, user_id: &str) -> AppResult<bool> {
+    pub async fn check_access(
+        &self,
+        database_id: &str,
+        user_id: &str,
+        is_admin: bool,
+    ) -> AppResult<bool> {
+        if is_admin {
+            return Ok(true);
+        }
         let project_id = self
             .database_repo
             .get_project_id(database_id)

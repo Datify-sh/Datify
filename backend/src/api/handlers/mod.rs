@@ -10,6 +10,7 @@ mod projects;
 mod sql;
 mod system;
 mod terminal;
+mod user_admin;
 
 pub use audit_logs::*;
 pub use auth::*;
@@ -23,3 +24,4 @@ pub use projects::*;
 pub use sql::*;
 pub use system::*;
 pub use terminal::*;
+pub use user_admin::*;
