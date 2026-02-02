@@ -6,7 +6,6 @@ export interface LoginRequest {
 export interface RegisterRequest {
   email: string;
   password: string;
-  name: string;
 }
 
 export interface RefreshRequest {
@@ -23,7 +22,6 @@ export interface AuthTokens {
 export interface UserResponse {
   id: string;
   email: string;
-  name: string;
   role: "admin" | "user";
   email_verified: boolean;
   created_at: string;
@@ -518,7 +516,6 @@ export interface AuditLogResponse {
   id: string;
   user_id: string;
   user_email?: string | null;
-  user_name?: string | null;
   action: AuditAction;
   entity_type: AuditEntityType;
   entity_id?: string | null;

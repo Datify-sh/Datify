@@ -94,8 +94,10 @@ function AuditLogRow({ log }: { log: AuditLogResponse }) {
       </TableCell>
       <TableCell>
         <div className="flex flex-col">
-          <span className="font-medium text-sm">{log.user_name || "Unknown"}</span>
-          <span className="text-xs text-muted-foreground">{log.user_email}</span>
+          <span className="font-medium text-sm">{log.user_email || "Unknown"}</span>
+          <span className="text-xs text-muted-foreground">
+            {log.user_id ? `ID ${log.user_id.slice(0, 8)}` : "No user ID"}
+          </span>
         </div>
       </TableCell>
       <TableCell>

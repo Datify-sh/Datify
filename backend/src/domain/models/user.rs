@@ -38,7 +38,6 @@ pub struct User {
     pub email: String,
     #[serde(skip_serializing)]
     pub password_hash: String,
-    pub name: String,
     pub role: String,
     pub email_verified: bool,
     pub created_at: String,
@@ -59,13 +58,11 @@ impl User {
 pub struct CreateUserRequest {
     pub email: String,
     pub password: String,
-    pub name: String,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct UpdateUserRequest {
     pub email: Option<String>,
-    pub name: Option<String>,
     pub password: Option<String>,
 }
 
@@ -73,7 +70,6 @@ pub struct UpdateUserRequest {
 pub struct UserResponse {
     pub id: String,
     pub email: String,
-    pub name: String,
     pub role: String,
     pub email_verified: bool,
     pub created_at: String,
@@ -84,7 +80,6 @@ impl From<User> for UserResponse {
         Self {
             id: user.id,
             email: user.email,
-            name: user.name,
             role: user.role,
             email_verified: user.email_verified,
             created_at: user.created_at,

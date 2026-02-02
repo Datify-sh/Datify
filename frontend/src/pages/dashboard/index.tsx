@@ -60,9 +60,7 @@ export function DashboardPage() {
     <div className="space-y-8">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
-            Welcome back, {user?.name?.split(" ")[0]}
-          </h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Welcome back, {user?.email}</h1>
           <p className="text-muted-foreground">Here's what's happening with your databases</p>
         </div>
         <Button onClick={() => setCreateOpen(true)}>

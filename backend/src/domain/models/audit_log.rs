@@ -161,7 +161,6 @@ pub struct AuditLogWithUser {
     pub user_agent: Option<String>,
     pub created_at: String,
     pub user_email: Option<String>,
-    pub user_name: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, ToSchema)]
@@ -178,7 +177,6 @@ pub struct AuditLogResponse {
     pub id: String,
     pub user_id: String,
     pub user_email: Option<String>,
-    pub user_name: Option<String>,
     pub action: String,
     pub entity_type: String,
     pub entity_id: Option<String>,
@@ -190,11 +188,7 @@ pub struct AuditLogResponse {
 }
 
 impl AuditLog {
-    pub fn to_response(
-        self,
-        user_email: Option<String>,
-        user_name: Option<String>,
-    ) -> AuditLogResponse {
+    pub fn to_response(self, user_email: Option<String>) -> AuditLogResponse {
         let changes = self
             .changes
             .as_ref()
@@ -204,7 +198,6 @@ impl AuditLog {
             id: self.id,
             user_id: self.user_id,
             user_email,
-            user_name,
             action: self.action,
             entity_type: self.entity_type,
             entity_id: self.entity_id,
@@ -228,7 +221,6 @@ impl AuditLogWithUser {
             id: self.id,
             user_id: self.user_id,
             user_email: self.user_email,
-            user_name: self.user_name,
             action: self.action,
             entity_type: self.entity_type,
             entity_id: self.entity_id,

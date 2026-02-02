@@ -52,8 +52,8 @@ impl AuditLogRepository {
         offset: i64,
     ) -> AppResult<Vec<AuditLogWithUser>> {
         let mut query = String::from(
-            "SELECT a.*, u.email AS user_email, u.name AS user_name FROM audit_logs a LEFT JOIN \
-             users u ON u.id = a.user_id WHERE a.user_id = ?",
+            "SELECT a.*, u.email AS user_email FROM audit_logs a LEFT JOIN users u ON u.id = \
+             a.user_id WHERE a.user_id = ?",
         );
         let mut binds: Vec<String> = vec![user_id.to_string()];
 
@@ -78,8 +78,8 @@ impl AuditLogRepository {
         offset: i64,
     ) -> AppResult<Vec<AuditLogWithUser>> {
         let mut query = String::from(
-            "SELECT a.*, u.email AS user_email, u.name AS user_name FROM audit_logs a LEFT JOIN \
-             users u ON u.id = a.user_id WHERE 1=1",
+            "SELECT a.*, u.email AS user_email FROM audit_logs a LEFT JOIN users u ON u.id = \
+             a.user_id WHERE 1=1",
         );
         let mut binds: Vec<String> = vec![];
 

@@ -180,12 +180,12 @@ export function AppSidebar({ variant = "inset" }: { variant?: "sidebar" | "float
                   <SidebarMenuButton className="h-auto py-2">
                     <Avatar className="size-7 rounded-md">
                       <AvatarFallback className="rounded-md text-xs font-medium">
-                        {user?.name?.charAt(0).toUpperCase() || "U"}
+                        {user?.email?.charAt(0).toUpperCase() || "U"}
                       </AvatarFallback>
                     </Avatar>
                     <div className="flex flex-col items-start gap-0.5 group-data-[collapsible=icon]:hidden">
-                      <span className="text-sm font-medium">{user?.name}</span>
-                      <span className="text-xs text-muted-foreground">{user?.email}</span>
+                      <span className="text-sm font-medium">{user?.email}</span>
+                      <span className="text-xs text-muted-foreground">{user?.role}</span>
                     </div>
                   </SidebarMenuButton>
                 </DropdownMenuTrigger>

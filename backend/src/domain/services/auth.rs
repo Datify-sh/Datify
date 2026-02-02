@@ -65,12 +65,7 @@ impl AuthService {
         self.settings.security.secure_cookies
     }
 
-    pub async fn register(
-        &self,
-        email: &str,
-        password: &str,
-        name: &str,
-    ) -> AppResult<LoginResponse> {
+    pub async fn register(&self, email: &str, password: &str) -> AppResult<LoginResponse> {
         if !email.validate_email() {
             return Err(AppError::Validation("Invalid email format".to_string()));
         }
@@ -86,10 +81,7 @@ impl AuthService {
 
         let password_hash = self.hash_password(password)?;
 
-        let user = self
-            .user_repo
-            .create(email, &password_hash, name, "user")
-            .await?;
+        let user = self.user_repo.create(email, &password_hash, "user").await?;
 
         let tokens = self.generate_tokens(&user)?;
 

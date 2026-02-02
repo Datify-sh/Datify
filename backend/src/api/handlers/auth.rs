@@ -36,7 +36,6 @@ pub type AuthServiceState = Arc<AuthService>;
 pub struct RegisterRequest {
     pub email: String,
     pub password: String,
-    pub name: String,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -69,7 +68,7 @@ pub async fn register(
     Json(payload): Json<RegisterRequest>,
 ) -> AppResult<impl IntoResponse> {
     let response = auth_service
-        .register(&payload.email, &payload.password, &payload.name)
+        .register(&payload.email, &payload.password)
         .await?;
 
     audit_service.log(

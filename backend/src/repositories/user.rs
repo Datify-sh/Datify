@@ -14,25 +14,18 @@ impl UserRepository {
         Self { pool }
     }
 
-    pub async fn create(
-        &self,
-        email: &str,
-        password_hash: &str,
-        name: &str,
-        role: &str,
-    ) -> AppResult<User> {
+    pub async fn create(&self, email: &str, password_hash: &str, role: &str) -> AppResult<User> {
         let id = Uuid::new_v4().to_string();
 
         sqlx::query(
             r#"
-            INSERT INTO users (id, email, password_hash, name, role)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO users (id, email, password_hash, role)
+            VALUES (?, ?, ?, ?)
             "#,
         )
         .bind(&id)
         .bind(email)
         .bind(password_hash)
-        .bind(name)
         .bind(role)
         .execute(&self.pool)
         .await
@@ -71,47 +64,31 @@ impl UserRepository {
         &self,
         id: &str,
         email: Option<&str>,
-        name: Option<&str>,
         password_hash: Option<&str>,
     ) -> AppResult<User> {
-        if email.is_none() && name.is_none() && password_hash.is_none() {
+        if email.is_none() && password_hash.is_none() {
             return self
                 .find_by_id(id)
                 .await?
                 .ok_or_else(|| AppError::NotFound(format!("User with id '{}' not found", id)));
         }
 
-        let result = match (email, name, password_hash) {
-            (Some(e), None, None) => {
+        let result = match (email, password_hash) {
+            (Some(e), None) => {
                 sqlx::query("UPDATE users SET email = ? WHERE id = ?")
                     .bind(e)
                     .bind(id)
                     .execute(&self.pool)
                     .await?
             },
-            (None, Some(n), None) => {
-                sqlx::query("UPDATE users SET name = ? WHERE id = ?")
-                    .bind(n)
-                    .bind(id)
-                    .execute(&self.pool)
-                    .await?
-            },
-            (None, None, Some(p)) => {
+            (None, Some(p)) => {
                 sqlx::query("UPDATE users SET password_hash = ? WHERE id = ?")
                     .bind(p)
                     .bind(id)
                     .execute(&self.pool)
                     .await?
             },
-            (Some(e), Some(n), None) => {
-                sqlx::query("UPDATE users SET email = ?, name = ? WHERE id = ?")
-                    .bind(e)
-                    .bind(n)
-                    .bind(id)
-                    .execute(&self.pool)
-                    .await?
-            },
-            (Some(e), None, Some(p)) => {
+            (Some(e), Some(p)) => {
                 sqlx::query("UPDATE users SET email = ?, password_hash = ? WHERE id = ?")
                     .bind(e)
                     .bind(p)
@@ -119,24 +96,7 @@ impl UserRepository {
                     .execute(&self.pool)
                     .await?
             },
-            (None, Some(n), Some(p)) => {
-                sqlx::query("UPDATE users SET name = ?, password_hash = ? WHERE id = ?")
-                    .bind(n)
-                    .bind(p)
-                    .bind(id)
-                    .execute(&self.pool)
-                    .await?
-            },
-            (Some(e), Some(n), Some(p)) => {
-                sqlx::query("UPDATE users SET email = ?, name = ?, password_hash = ? WHERE id = ?")
-                    .bind(e)
-                    .bind(n)
-                    .bind(p)
-                    .bind(id)
-                    .execute(&self.pool)
-                    .await?
-            },
-            (None, None, None) => unreachable!(),
+            (None, None) => unreachable!(),
         };
 
         if result.rows_affected() == 0 {

@@ -19,7 +19,6 @@ export function RegisterPage() {
     setIsLoading(true);
 
     const formData = new FormData(e.currentTarget);
-    const name = formData.get("name") as string;
     const email = formData.get("email") as string;
     const password = formData.get("password") as string;
     const confirmPassword = formData.get("confirmPassword") as string;
@@ -37,7 +36,7 @@ export function RegisterPage() {
     }
 
     try {
-      await register({ name, email, password });
+      await register({ email, password });
       navigate("/");
     } catch (err) {
       setError(getErrorMessage(err, "Failed to create account"));
@@ -61,18 +60,6 @@ export function RegisterPage() {
         )}
 
         <Field>
-          <FieldLabel>Name</FieldLabel>
-          <Input
-            name="name"
-            type="text"
-            placeholder="Your name"
-            required
-            autoComplete="name"
-            autoFocus
-          />
-        </Field>
-
-        <Field>
           <FieldLabel>Email</FieldLabel>
           <Input
             name="email"
@@ -80,6 +67,7 @@ export function RegisterPage() {
             placeholder="you@example.com"
             required
             autoComplete="email"
+            autoFocus
           />
         </Field>
 
