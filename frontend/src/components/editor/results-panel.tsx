@@ -37,6 +37,15 @@ interface ResultsPanelProps {
   executionTime?: number;
 }
 
+/**
+ * Render a results panel for a query, displaying either SQL or key-value (KV) outputs with contextual controls.
+ *
+ * Renders an error view if the result contains an error; otherwise shows a header with status, metadata (execution time, row/command counts), and context-specific actions (SQL: table/JSON view + CSV download; KV: pretty/raw toggle, wrap toggle, copy output). The main content area displays SQL results as a table or JSON and KV results in pretty or raw form.
+ *
+ * @param result - The query result object to display (SQL or KV).
+ * @param executionTime - Optional execution time in milliseconds to show in the header.
+ * @returns The React element tree for the results panel.
+ */
 export function ResultsPanel({ result, executionTime }: ResultsPanelProps) {
   const [activeView, setActiveView] = React.useState<"table" | "json">("table");
   const [kvView, setKvView] = React.useState<"pretty" | "raw">("pretty");
@@ -234,6 +243,13 @@ export function ResultsPanel({ result, executionTime }: ResultsPanelProps) {
   );
 }
 
+/**
+ * Render SQL query results as either a table or a JSON view and display an empty-state when no rows are present.
+ *
+ * @param result - The SqlResult containing column metadata and rows to render.
+ * @param view - Display mode: `"table"` renders a tabular grid with column names and types; `"json"` renders rows as an array of objects keyed by column name.
+ * @returns A React element that displays the SQL results according to the selected view.
+ */
 function SqlResults({ result, view }: { result: SqlResult; view: "table" | "json" }) {
   if (result.rows.length === 0) {
     return (
@@ -311,6 +327,18 @@ function SqlResults({ result, view }: { result: SqlResult; view: "table" | "json
   );
 }
 
+/**
+ * Render a scrollable list of key-value command results or an empty-state placeholder.
+ *
+ * Renders a centered placeholder when no commands were executed. Otherwise renders each
+ * KeyValueResult as a bordered panel showing the command (as inline code), an "Error"
+ * label when present, and either the error text or a KvOutput component for the item.
+ *
+ * @param result - The KV result set containing an array of command results.
+ * @param view - Display mode for each item's output; `"pretty"` shows parsed INFO sections when applicable, `"raw"` shows raw text.
+ * @param wrapLines - When true, wrap long lines in rendered output; when false, preserve horizontal scrolling.
+ * @returns A React element containing either the empty-state placeholder or the scrollable list of KV result panels.
+ */
 function KvResults({
   result,
   view,
@@ -367,6 +395,13 @@ function KvResults({
   );
 }
 
+/**
+ * Render a single key-value command result either as parsed INFO sections (collapsible, human-friendly) or as a raw preformatted block.
+ *
+ * @param item - The KeyValueResult object containing the command, result value, and optional error.
+ * @param view - Display mode: `"pretty"` attempts to render structured INFO output, `"raw"` always shows the raw formatted text.
+ * @param wrapLines - When true, allow long lines to wrap in the rendered output; when false, preserve horizontal scrolling/truncation.
+ * @returns A React element that displays the formatted KV output according to `view` and `wrapLines`.
 function KvOutput({
   item,
   view,
@@ -429,12 +464,24 @@ function KvOutput({
   );
 }
 
+/**
+ * Produces a human-readable string representation of a KV command result.
+ *
+ * @param result - The KV result value to format; may be `null`, `undefined`, a string, or any other value.
+ * @returns An empty string for `null` or `undefined`, the original string if `result` is a string, or a pretty-printed JSON string for other values.
+ */
 function formatKvText(result: unknown): string {
   if (result === null || result === undefined) return "";
   if (typeof result === "string") return result;
   return JSON.stringify(result, null, 2);
 }
 
+/**
+ * Determines whether a key-value result's command is an INFO command.
+ *
+ * @param item - The key-value result whose `command` will be inspected
+ * @returns `true` if `item.command` starts with "INFO" (case-insensitive), `false` otherwise.
+ */
 function isInfoCommand(item: KeyValueResult): boolean {
   return item.command.trim().toUpperCase().startsWith("INFO");
 }
@@ -445,6 +492,12 @@ type InfoSection = {
   extras: string[];
 };
 
+/**
+ * Parse INFO-style output into an array of titled sections containing key/value entries and any extra lines.
+ *
+ * @param raw - Raw multiline string output (typically from an INFO command)
+ * @returns An array of `InfoSection` objects. Each section has a `title`, an `entries` array of `{ key, value }` pairs parsed from lines containing `:`, and an `extras` array for lines that do not contain a `:` delimiter.
+ */
 function parseInfoOutput(raw: string): InfoSection[] {
   const sections: InfoSection[] = [];
   let current: InfoSection = { title: "General", entries: [], extras: [] };

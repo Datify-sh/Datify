@@ -20,6 +20,15 @@ interface EditorPanelProps {
   isRunning: boolean;
 }
 
+/**
+ * Render a tabbed query editor and results panel for the given database.
+ *
+ * Displays a multi-tab query/command editor (SQL for Postgres, command editor for KV stores), a toolbar with run controls, per-tab execution state and results, and a message when the database is not running. Tabs can be added, closed, switched, edited, and executed; results are shown below the editor when available.
+ *
+ * @param database - Database metadata used to choose editor mode, label UI, and identify the target for query execution
+ * @param isRunning - When false, shows a disabled/placeholder state indicating the database must be started to run queries
+ * @returns The React element for the editor panel UI
+ */
 export function EditorPanel({ database, isRunning }: EditorPanelProps) {
   const {
     tabs,
@@ -193,7 +202,14 @@ export function EditorPanel({ database, isRunning }: EditorPanelProps) {
   );
 }
 
-// Query execution function
+/**
+ * Execute the provided SQL query or newline-separated commands against the specified database and return a structured result.
+ *
+ * @param databaseId - The target database identifier.
+ * @param databaseType - The database engine type (e.g., `"postgres"` or a key-value/command type).
+ * @param content - SQL text or newline-separated commands; for command-style databases, lines starting with `#`, `//`, or `--` are ignored.
+ * @returns A QueryResult: a `SqlResult` when `databaseType` is `"postgres"` (includes `columns`, `rows`, `rowCount`, `truncated`, and `error`), or a `KeyValueResult` for command/kv databases (includes per-command `results` and `error`).
+ */
 async function executeQuery(
   databaseId: string,
   databaseType: DatabaseType,
@@ -255,6 +271,13 @@ async function executeQuery(
   };
 }
 
+/**
+ * Create a QueryResult representing an error for the specified result type.
+ *
+ * @param type - The result type to construct (`"sql"` or `"kv"`).
+ * @param message - The error message to include in the result.
+ * @returns A QueryResult with empty data fields for the chosen type and `error` set to `message`.
+ */
 function buildErrorResult(type: "sql" | "kv", message: string): QueryResult {
   if (type === "sql") {
     return {

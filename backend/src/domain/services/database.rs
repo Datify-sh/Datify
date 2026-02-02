@@ -574,6 +574,24 @@ impl DatabaseService {
         self.database_repo.count_by_project(project_id).await
     }
 
+    /// Checks whether the given user is the owner of the project that contains the specified database.
+    ///
+    /// Returns an error if the database does not exist or if repository calls fail.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use your_crate::services::DatabaseService;
+    /// # async fn example(svc: &DatabaseService) -> Result<(), Box<dyn std::error::Error>> {
+    /// let has_access = svc.check_access("database-id", "user-id").await?;
+    /// if has_access {
+    ///     println!("user is owner of the project's database");
+    /// } else {
+    ///     println!("user is not the owner");
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
     pub async fn check_access(&self, database_id: &str, user_id: &str) -> AppResult<bool> {
         let project_id = self
             .database_repo
@@ -584,6 +602,18 @@ impl DatabaseService {
         self.project_repo.is_owner(&project_id, user_id).await
     }
 
+    /// Execute a Redis or Valkey command inside the database container and return its output.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // Assume `svc` is a `DatabaseService` instance with a running Redis/Valkey database.
+    /// // This example sends a `PING` command and expects `PONG`.
+    /// # async fn run_example(svc: &super::DatabaseService) {
+    /// let res = svc.execute_kv_command("database-id", "user-id", "PING", None).await.unwrap();
+    /// assert_eq!(res.result, "PONG");
+    /// # }
+    /// ```
     pub async fn execute_kv_command(
         &self,
         database_id: &str,
@@ -693,6 +723,27 @@ impl DatabaseService {
         })
     }
 
+    /// List branch databases for a given database if the requesting user has access.
+    ///
+    /// Calls the repository to retrieve all branches for `database_id` and returns them
+    /// as a vector of `BranchResponse` values. Requires the `user_id` to have access to
+    /// the parent database's project; otherwise the call will fail with `AppError::Forbidden`.
+    ///
+    /// # Errors
+    ///
+    /// Returns `AppError::Forbidden` when the user does not have access to the database's project.
+    /// Repository and internal errors from the underlying calls are propagated.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # async fn example(db_service: &crate::domain::services::DatabaseService) -> Result<(), crate::AppError> {
+    /// let branches = db_service.list_branches("db-123", "user-456").await?;
+    /// for b in branches {
+    ///     println!("{}", b.name);
+    /// }
+    /// # Ok(()) }
+    /// ```
     pub async fn list_branches(
         &self,
         database_id: &str,

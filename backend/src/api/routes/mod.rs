@@ -26,6 +26,27 @@ use crate::middleware::{
 };
 use crate::repositories::Repositories;
 
+/// Builds the application's HTTP router with all routes, services, and middleware configured.
+///
+/// The returned router includes public and protected API routes (versioned under `/api/v1`),
+/// rate limiting, authentication and audit layers for protected routes, CORS, security headers,
+/// HTTP tracing, and optional static frontend serving from `./public` when present.
+///
+/// # Examples
+///
+/// ```no_run
+/// use std::sync::Arc;
+/// use sqlx::SqlitePool;
+/// use crate::{create_router, Settings, DockerManager};
+///
+/// # async fn _example() -> anyhow::Result<()> {
+/// let db_pool = SqlitePool::connect("sqlite::memory:").await?;
+/// let docker = DockerManager::default();
+/// let settings = Arc::new(Settings::default());
+/// let router = create_router(db_pool, docker, settings).await;
+/// // `router` is ready to be used by an HTTP server (e.g., axum::Server).
+/// # Ok(()) }
+/// ```
 pub async fn create_router(
     db_pool: SqlitePool,
     docker: DockerManager,

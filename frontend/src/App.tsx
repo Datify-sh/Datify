@@ -94,6 +94,15 @@ function RouteSuspense({ children }: { children: React.ReactNode }) {
   return <React.Suspense fallback={<RouteFallback />}>{children}</React.Suspense>;
 }
 
+/**
+ * Root application component that configures providers, routing, and global UI.
+ *
+ * Sets up theme support, React Query client, browser routing, authentication context,
+ * lazily loaded application routes (auth, dashboard, projects, databases, audit logs),
+ * and a global Toaster for notifications.
+ *
+ * @returns The top-level React element for the application containing providers and routes.
+ */
 export function App() {
   return (
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem={true}>

@@ -82,6 +82,15 @@ const TAB_ROUTE_MAP: Record<DatabaseTabKey, string> = {
   settings: "settings",
 };
 
+/**
+ * Render the database detail page, including header, status controls, storage summary,
+ * tabbed navigation, and nested route outlet populated with contextual data and actions.
+ *
+ * Fetches database, project, and parent database data; subscribes to realtime metrics when running;
+ * and exposes start/stop/restart/delete/sync mutations and derived UI state to child routes via Outlet context.
+ *
+ * @returns The React element tree for the database detail view
+ */
 export function DatabaseDetailPage() {
   const { id } = useParams<{ id: string }>();
   const location = useLocation();

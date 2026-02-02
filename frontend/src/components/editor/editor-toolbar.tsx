@@ -12,6 +12,19 @@ interface EditorToolbarProps {
   hasContent: boolean;
 }
 
+/**
+ * Render the editor toolbar with the Run control, connection indicator, and quick-key hints.
+ *
+ * The Run button invokes `onRun`, is disabled while `isExecuting` or when `hasContent` is false,
+ * and shows an execution spinner while `isExecuting` is true. Tooltip and displayed labels
+ * switch between SQL-oriented text for `databaseType === "postgres"` and command-oriented text otherwise.
+ *
+ * @param databaseType - The current database type (e.g., "postgres") that determines icons and labels
+ * @param onRun - Callback invoked when the Run button is clicked
+ * @param isExecuting - Whether a command/query is currently executing; affects button state and visual indicator
+ * @param hasContent - Whether the editor contains content; when false the Run button is disabled
+ * @returns The toolbar JSX element for use in an editor header
+ */
 export function EditorToolbar({
   databaseType,
   onRun,

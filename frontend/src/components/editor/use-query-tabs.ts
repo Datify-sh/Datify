@@ -27,6 +27,20 @@ const createNewTab = (databaseType: DatabaseType, index: number): QueryTab => ({
   isExecuting: false,
 });
 
+/**
+ * Manages a list of query editor tabs and provides actions to add, close, switch, and update tabs.
+ *
+ * @param databaseType - Database type used to initialize new tabs' default content and tab type (e.g., `"postgres"` for SQL tabs, otherwise KV-style tabs).
+ * @returns An object with the current tab state and mutator functions:
+ *  - `tabs`: the array of `QueryTab` objects.
+ *  - `activeTabId`: the id of the currently active tab.
+ *  - `addTab()`: creates a new tab, makes it active, and returns the new tab's id.
+ *  - `closeTab(tabId)`: removes the specified tab (no-op if only one tab remains) and updates the active tab if the closed tab was active.
+ *  - `setActiveTab(tabId)`: sets the active tab by id.
+ *  - `updateTabContent(tabId, content)`: replaces a tab's content and, if `content` is non-empty, updates the tab title derived from the content and tab type.
+ *  - `updateTabResult(tabId, result, executionTime?)`: sets a tab's result and optional execution time, and marks the tab as not executing.
+ *  - `setTabExecuting(tabId, isExecuting)`: sets the executing flag for the specified tab.
+ */
 export function useQueryTabs(databaseType: DatabaseType) {
   const [tabs, setTabs] = React.useState<QueryTab[]>(() => [createNewTab(databaseType, 1)]);
   const [activeTabId, setActiveTabId] = React.useState<string>(tabs[0].id);
@@ -99,6 +113,15 @@ export function useQueryTabs(databaseType: DatabaseType) {
   };
 }
 
+/**
+ * Derives a human-readable tab title from query content for SQL or KV editors.
+ *
+ * For SQL content, the title will prefer the operation and table name (e.g., "SELECT users"), fall back to the first word of the query, or "Query" if empty. For KV content, the title is the first command token uppercased (e.g., "GET") or "Command" if empty.
+ *
+ * @param content - The query or command text to derive the title from
+ * @param type - The editor type that determines parsing rules: `"sql"` or `"kv"`
+ * @returns The derived title string appropriate for a tab label
+ */
 function getQueryTitle(content: string, type: "sql" | "kv"): string {
   const trimmed = content.trim();
   if (!trimmed) return "Query";

@@ -67,6 +67,18 @@ interface QueryEditorProps {
   className?: string;
 }
 
+/**
+ * Renders an embedded code editor for SQL (Postgres) or a lightweight key-value mode and exposes content editing and run controls.
+ *
+ * The editor adapts to the current theme, lazy-loads Postgres SQL support when `databaseType` is "postgres", shows a loading placeholder before initialization, and listens for Cmd/Ctrl+Enter to invoke `onRun`.
+ *
+ * @param content - The current editor content
+ * @param onChange - Called when the editor content changes
+ * @param databaseType - The active database type; selects SQL highlighting for "postgres" and a key-value mode otherwise
+ * @param onRun - Invoked when the user triggers the run shortcut (Cmd/Ctrl+Enter)
+ * @param className - Optional container class names for styling
+ * @returns The rendered QueryEditor React element
+ */
 export function QueryEditor({
   content,
   onChange,
