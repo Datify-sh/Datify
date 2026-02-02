@@ -1,3 +1,9 @@
+import {
+  editorHighlightDark,
+  editorHighlightLight,
+  editorThemeDark,
+  editorThemeLight,
+} from "@/components/editor/editor-theme";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -8,39 +14,12 @@ import { RefreshIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import CodeMirror from "@uiw/react-codemirror";
+import { useTheme } from "next-themes";
 import * as React from "react";
 import { toast } from "sonner";
 
-const configTheme = EditorView.theme(
+const configThemeDark = EditorView.theme(
   {
-    "&": {
-      backgroundColor: "transparent",
-      color: "#d1fae5",
-      fontFamily:
-        'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
-      fontSize: "12px",
-    },
-    ".cm-scroller": {
-      backgroundColor: "#0a0a0a",
-    },
-    ".cm-content": {
-      padding: "16px",
-      caretColor: "#34d399",
-    },
-    ".cm-selectionBackground": {
-      backgroundColor: "rgba(16, 185, 129, 0.25)",
-    },
-    ".cm-activeLine": {
-      backgroundColor: "rgba(255, 255, 255, 0.04)",
-    },
-    ".cm-gutters": {
-      backgroundColor: "#0a0a0a",
-      color: "#6b7280",
-      border: "none",
-    },
-    ".cm-activeLineGutter": {
-      color: "#e5e7eb",
-    },
     ".cm-config-comment": {
       color: "#64748b",
       fontStyle: "italic",
@@ -62,6 +41,31 @@ const configTheme = EditorView.theme(
     },
   },
   { dark: true },
+);
+
+const configThemeLight = EditorView.theme(
+  {
+    ".cm-config-comment": {
+      color: "#64748b",
+      fontStyle: "italic",
+    },
+    ".cm-config-key": {
+      color: "#0f766e",
+    },
+    ".cm-config-string": {
+      color: "#047857",
+    },
+    ".cm-config-number": {
+      color: "#b45309",
+    },
+    ".cm-config-bool": {
+      color: "#0f766e",
+    },
+    ".cm-config-operator": {
+      color: "#64748b",
+    },
+  },
+  { dark: false },
 );
 
 const configKeyDecoration = Decoration.mark({ class: "cm-config-key" });
@@ -176,12 +180,14 @@ const configHighlightPlugin = ViewPlugin.fromClass(
   },
 );
 
-const baseConfigExtensions = [configTheme, configHighlightPlugin, EditorView.lineWrapping];
+const baseConfigExtensions = [configHighlightPlugin, EditorView.lineWrapping];
 
 type DatabaseDetail = NonNullable<Awaited<ReturnType<typeof databasesApi.get>>>;
 
 const ConfigPanel = React.memo(function ConfigPanel({ database }: { database: DatabaseDetail }) {
   const queryClient = useQueryClient();
+  const { resolvedTheme } = useTheme();
+  const isDark = resolvedTheme !== "light";
 
   const {
     data: config,
@@ -221,10 +227,12 @@ const ConfigPanel = React.memo(function ConfigPanel({ database }: { database: Da
       ? "# maxmemory 256mb\n# maxmemory-policy allkeys-lru"
       : "# Add your config values here";
 
-  const editorExtensions = React.useMemo(
-    () => [...baseConfigExtensions, placeholder(placeholderText)],
-    [placeholderText],
-  );
+  const editorExtensions = React.useMemo(() => {
+    const themeExtensions = isDark
+      ? [editorHighlightDark, configThemeDark]
+      : [editorHighlightLight, configThemeLight];
+    return [...themeExtensions, ...baseConfigExtensions, placeholder(placeholderText)];
+  }, [isDark, placeholderText]);
 
   if (isError) {
     return (
@@ -280,7 +288,7 @@ const ConfigPanel = React.memo(function ConfigPanel({ database }: { database: Da
             value={draft}
             onChange={(value) => setDraft(value)}
             height="520px"
-            theme={configTheme}
+            theme={isDark ? editorThemeDark : editorThemeLight}
             extensions={editorExtensions}
             basicSetup={{
               lineNumbers: true,

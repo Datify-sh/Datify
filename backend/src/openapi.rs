@@ -56,6 +56,7 @@ use utoipa::OpenApi;
         crate::api::handlers::sync_from_parent,
         crate::api::handlers::get_database_schema,
         crate::api::handlers::execute_query,
+        crate::api::handlers::execute_kv_command,
         crate::api::handlers::preview_table,
         crate::api::handlers::list_audit_logs,
     ),
@@ -114,8 +115,10 @@ use utoipa::OpenApi;
         crate::domain::models::ColumnDetail,
         crate::domain::models::IndexInfo,
         crate::domain::models::ExecuteQueryRequest,
+        crate::domain::models::ExecuteKvCommandRequest,
         crate::domain::models::ColumnInfo,
         crate::domain::models::QueryResult,
+        crate::domain::models::KvCommandResult,
         crate::domain::models::TablePreviewQuery,
         crate::domain::models::TablePreview,
         crate::domain::models::AuditLogResponse,
@@ -134,6 +137,7 @@ use utoipa::OpenApi;
         (name = "Terminal", description = "Interactive terminal and psql access endpoints"),
         (name = "Metrics", description = "Database metrics and query statistics endpoints"),
         (name = "SQL", description = "SQL query execution and schema introspection endpoints"),
+        (name = "Key-Value", description = "Redis/Valkey command execution endpoints"),
         (name = "Audit Logs", description = "Audit log retrieval endpoints")
     ),
     modifiers(&SecurityAddon)

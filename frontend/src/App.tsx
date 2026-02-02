@@ -14,6 +14,7 @@ const loadRegisterPage = () => import("@/pages/auth/register");
 const loadDashboardPage = () => import("@/pages/dashboard");
 const loadDatabaseDetailPage = () => import("@/pages/databases/detail");
 const loadDatabaseConnectionTab = () => import("@/pages/databases/tabs/connection");
+const loadDatabaseEditorTab = () => import("@/pages/databases/tabs/editor");
 const loadDatabaseBranchesTab = () => import("@/pages/databases/tabs/branches");
 const loadDatabaseMetricsTab = () => import("@/pages/databases/tabs/metrics");
 const loadDatabaseTerminalTab = () => import("@/pages/databases/tabs/terminal");
@@ -40,6 +41,9 @@ const DatabaseDetailPage = React.lazy(() =>
 );
 const DatabaseConnectionTab = React.lazy(() =>
   loadDatabaseConnectionTab().then((module) => ({ default: module.DatabaseConnectionTab })),
+);
+const DatabaseEditorTab = React.lazy(() =>
+  loadDatabaseEditorTab().then((module) => ({ default: module.DatabaseEditorTab })),
 );
 const DatabaseBranchesTab = React.lazy(() =>
   loadDatabaseBranchesTab().then((module) => ({ default: module.DatabaseBranchesTab })),
@@ -156,6 +160,14 @@ export function App() {
                     element={
                       <RouteSuspense>
                         <DatabaseConnectionTab />
+                      </RouteSuspense>
+                    }
+                  />
+                  <Route
+                    path="editor"
+                    element={
+                      <RouteSuspense>
+                        <DatabaseEditorTab />
                       </RouteSuspense>
                     }
                   />
