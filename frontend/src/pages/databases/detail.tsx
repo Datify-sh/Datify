@@ -36,6 +36,7 @@ import {
   RefreshIcon,
   Settings01Icon,
   SquareLock02Icon,
+  Wrench01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -541,25 +542,25 @@ export function DatabaseDetailPage() {
               Branches
             </TabsTrigger>
           )}
-          <TabsTrigger value="metrics" onMouseEnter={() => void loadMetricsTab()}>
-            <HugeiconsIcon icon={BarChartIcon} className="size-4" strokeWidth={2} />
-            Metrics
-          </TabsTrigger>
           <TabsTrigger value="terminal" onMouseEnter={() => void loadTerminalTab()}>
             <HugeiconsIcon icon={CommandLineIcon} className="size-4" strokeWidth={2} />
             Terminal
+          </TabsTrigger>
+          <TabsTrigger value="metrics" onMouseEnter={() => void loadMetricsTab()}>
+            <HugeiconsIcon icon={BarChartIcon} className="size-4" strokeWidth={2} />
+            Metrics
           </TabsTrigger>
           <TabsTrigger value="logs" onMouseEnter={() => void loadLogsTab()}>
             <HugeiconsIcon icon={File01Icon} className="size-4" strokeWidth={2} />
             Logs
           </TabsTrigger>
-          <TabsTrigger value="config" onMouseEnter={() => void loadConfigTab()}>
-            <HugeiconsIcon icon={Settings01Icon} className="size-4" strokeWidth={2} />
-            Config
-          </TabsTrigger>
           <TabsTrigger value="settings" onMouseEnter={() => void loadSettingsTab()}>
             <HugeiconsIcon icon={Settings01Icon} className="size-4" strokeWidth={2} />
             Settings
+          </TabsTrigger>
+          <TabsTrigger value="config" onMouseEnter={() => void loadConfigTab()}>
+            <HugeiconsIcon icon={Wrench01Icon} className="size-4" strokeWidth={2} />
+            Config
           </TabsTrigger>
         </TabsList>
 
