@@ -26,18 +26,18 @@ export function DashboardPage() {
 
   const { data: projectsData, isLoading: projectsLoading } = useQuery({
     queryKey: ["projects"],
-    queryFn: () => projectsApi.list({ limit: 100 }),
+    queryFn: () => projectsApi.list({ pageSize: 100 }),
   });
 
   const projects = projectsData?.data || [];
-  const totalProjects = projectsData?.total || 0;
+  const totalProjects = projectsData?.pagination?.total_items ?? projects.length;
   const totalDatabases = projects.reduce((acc, p) => acc + (p.database_count || 0), 0);
 
   const { data: allDatabasesData, isLoading: databasesLoading } = useQuery({
     queryKey: ["all-databases-for-stats"],
     queryFn: async () => {
       const results = await Promise.all(
-        projects.map((p) => databasesApi.list(p.id, { limit: 100 })),
+        projects.map((p) => databasesApi.list(p.id, { pageSize: 100 })),
       );
       return results.flatMap((r) => r.data);
     },

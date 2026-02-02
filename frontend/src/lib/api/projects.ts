@@ -8,10 +8,10 @@ import type {
 } from "./types";
 
 export const projectsApi = {
-  list: (params?: { limit?: number; offset?: number }) => {
+  list: (params?: { page?: number; pageSize?: number }) => {
     const searchParams = new URLSearchParams();
-    if (params?.limit) searchParams.set("limit", params.limit.toString());
-    if (params?.offset) searchParams.set("offset", params.offset.toString());
+    if (params?.page !== undefined) searchParams.set("page", params.page.toString());
+    if (params?.pageSize !== undefined) searchParams.set("page_size", params.pageSize.toString());
     const query = searchParams.toString();
     return apiClient.get<PaginatedResponse<ProjectWithStats>>(
       `/projects${query ? `?${query}` : ""}`,

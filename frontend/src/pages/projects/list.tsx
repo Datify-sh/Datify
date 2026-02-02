@@ -48,7 +48,7 @@ export function ProjectsListPage() {
 
   const { data: projectsData, isLoading } = useQuery({
     queryKey: ["projects"],
-    queryFn: () => projectsApi.list({ limit: 50 }),
+    queryFn: () => projectsApi.list({ pageSize: 50 }),
     staleTime: 1000 * 30,
   });
 

@@ -64,11 +64,18 @@ export interface ProjectWithStats extends ProjectResponse {
   database_count: number;
 }
 
+export interface PaginationMeta {
+  page: number;
+  page_size: number;
+  total_items: number;
+  total_pages: number;
+  has_next: boolean;
+  has_prev: boolean;
+}
+
 export interface PaginatedResponse<T> {
   data: T[];
-  total: number;
-  limit: number;
-  offset: number;
+  pagination: PaginationMeta;
 }
 
 export type PostgresVersion = string;

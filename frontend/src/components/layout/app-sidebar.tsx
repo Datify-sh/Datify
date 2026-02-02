@@ -81,7 +81,7 @@ export function AppSidebar({ variant = "inset" }: { variant?: "sidebar" | "float
 
   const { data: projectsData } = useQuery({
     queryKey: ["projects"],
-    queryFn: () => projectsApi.list({ limit: 20 }),
+    queryFn: () => projectsApi.list({ pageSize: 20 }),
     staleTime: 1000 * 60,
   });
 
@@ -245,7 +245,7 @@ function ProjectItem({
 
   const { data: databasesData } = useQuery({
     queryKey: ["databases", project.id],
-    queryFn: () => databasesApi.list(project.id, { limit: 20 }),
+    queryFn: () => databasesApi.list(project.id, { pageSize: 20 }),
     enabled: isOpen,
     staleTime: 1000 * 30,
   });

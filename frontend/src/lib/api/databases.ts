@@ -22,10 +22,10 @@ import type {
 } from "./types";
 
 export const databasesApi = {
-  list: (projectId: string, params?: { limit?: number; offset?: number }) => {
+  list: (projectId: string, params?: { page?: number; pageSize?: number }) => {
     const searchParams = new URLSearchParams();
-    if (params?.limit) searchParams.set("limit", params.limit.toString());
-    if (params?.offset) searchParams.set("offset", params.offset.toString());
+    if (params?.page !== undefined) searchParams.set("page", params.page.toString());
+    if (params?.pageSize !== undefined) searchParams.set("page_size", params.pageSize.toString());
     const query = searchParams.toString();
     return apiClient.get<PaginatedResponse<DatabaseResponse>>(
       `/projects/${projectId}/databases${query ? `?${query}` : ""}`,
