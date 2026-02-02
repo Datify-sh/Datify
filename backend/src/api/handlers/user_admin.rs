@@ -6,9 +6,10 @@ use axum::{
     Extension, Json,
 };
 use serde::Deserialize;
+use validator::ValidateEmail;
 
 use crate::api::extractors::AuthUser;
-use crate::domain::models::{AuditAction, AuditEntityType, AuditStatus, User};
+use crate::domain::models::{AuditAction, AuditEntityType, AuditStatus, UserResponse};
 use crate::domain::services::{AuditLogService, AuthService, ProjectService};
 use crate::error::{AppError, AppResult};
 use crate::middleware::AuthState;
@@ -49,7 +50,7 @@ pub struct UpdateUserRequest {
         UserListQuery
     ),
     responses(
-        (status = 200, description = "List users", body = Vec<User>),
+        (status = 200, description = "List users", body = Vec<UserResponse>),
         (status = 401, description = "Unauthorized"),
         (status = 403, description = "Forbidden - Admin only")
     ),
@@ -60,12 +61,13 @@ pub async fn list_users(
     State(state): State<UserAdminState>,
     _auth_user: AuthUser,
     Query(query): Query<UserListQuery>,
-) -> AppResult<Json<Vec<User>>> {
+) -> AppResult<Json<Vec<UserResponse>>> {
     let limit = query.limit.unwrap_or(50).clamp(1, 100);
     let offset = query.offset.unwrap_or(0).max(0);
 
     let users = state.user_repo.list(limit, offset).await?;
-    Ok(Json(users))
+    let responses = users.into_iter().map(UserResponse::from).collect();
+    Ok(Json(responses))
 }
 
 #[utoipa::path(
@@ -75,7 +77,7 @@ pub async fn list_users(
         ("id" = String, Path, description = "User ID")
     ),
     responses(
-        (status = 200, description = "Get user details", body = User),
+        (status = 200, description = "Get user details", body = UserResponse),
         (status = 401, description = "Unauthorized"),
         (status = 403, description = "Forbidden - Admin only"),
         (status = 404, description = "User not found")
@@ -87,14 +89,14 @@ pub async fn get_user(
     State(state): State<UserAdminState>,
     _auth_user: AuthUser,
     Path(id): Path<String>,
-) -> AppResult<Json<User>> {
+) -> AppResult<Json<UserResponse>> {
     let user = state
         .user_repo
         .find_by_id(&id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("User '{}' not found", id)))?;
 
-    Ok(Json(user))
+    Ok(Json(user.into()))
 }
 
 #[utoipa::path(
@@ -105,7 +107,7 @@ pub async fn get_user(
     ),
     request_body = UpdateUserRequest,
     responses(
-        (status = 200, description = "User updated", body = User),
+        (status = 200, description = "User updated", body = UserResponse),
         (status = 400, description = "Validation error"),
         (status = 401, description = "Unauthorized"),
         (status = 403, description = "Forbidden - Admin only"),
@@ -121,7 +123,41 @@ pub async fn update_user(
     auth_user: AuthUser,
     Path(id): Path<String>,
     Json(payload): Json<UpdateUserRequest>,
-) -> AppResult<Json<User>> {
+) -> AppResult<Json<UserResponse>> {
+    let email = payload.email.as_deref().map(str::trim);
+    if let Some(email_value) = email {
+        if email_value.is_empty() {
+            return Err(AppError::Validation("Email cannot be empty".to_string()));
+        }
+        if !email_value.validate_email() {
+            return Err(AppError::Validation("Invalid email format".to_string()));
+        }
+    }
+
+    if let Some(ref password) = payload.password {
+        if password.trim().is_empty() {
+            return Err(AppError::Validation("Password cannot be empty".to_string()));
+        }
+    }
+
+    let role = payload.role.as_deref();
+    if let Some(role_value) = role {
+        if role_value != "admin" && role_value != "user" {
+            return Err(AppError::Validation("Invalid role".to_string()));
+        }
+        if role_value == "user" && id == auth_user.id() {
+            return Err(AppError::Validation(
+                "You cannot revoke your own admin role".to_string(),
+            ));
+        }
+    }
+
+    if email.is_none() && payload.password.is_none() && role.is_none() {
+        return Err(AppError::Validation(
+            "At least one field must be provided".to_string(),
+        ));
+    }
+
     let password_hash = if let Some(p) = payload.password {
         Some(crate::utils::hash::hash_password(&p).await?)
     } else {
@@ -130,12 +166,7 @@ pub async fn update_user(
 
     let user = state
         .user_repo
-        .update(
-            &id,
-            payload.email.as_deref(),
-            password_hash.as_deref(),
-            payload.role.as_deref(),
-        )
+        .update(&id, email, password_hash.as_deref(), role)
         .await?;
 
     audit_service.log(
@@ -156,7 +187,7 @@ pub async fn update_user(
         get_user_agent(&headers),
     );
 
-    Ok(Json(user))
+    Ok(Json(user.into()))
 }
 
 #[utoipa::path(
@@ -166,7 +197,7 @@ pub async fn update_user(
         ("id" = String, Path, description = "User ID")
     ),
     responses(
-        (status = 200, description = "User deleted"),
+        (status = 204, description = "User deleted"),
         (status = 401, description = "Unauthorized"),
         (status = 403, description = "Forbidden - Admin only"),
         (status = 404, description = "User not found")
@@ -181,6 +212,11 @@ pub async fn delete_user(
     auth_user: AuthUser,
     Path(id): Path<String>,
 ) -> AppResult<StatusCode> {
+    if id == auth_user.id() {
+        return Err(AppError::Validation(
+            "You cannot delete your own account".to_string(),
+        ));
+    }
     // 1. List user projects
     let projects = state
         .project_service

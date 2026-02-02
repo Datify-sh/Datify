@@ -1,3 +1,4 @@
+import { AdminGuard } from "@/components/layout/admin-guard";
 import { AuthLayout } from "@/components/layout/auth-layout";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Spinner } from "@/components/ui/spinner";
@@ -23,6 +24,7 @@ const loadDatabaseConfigTab = () => import("@/pages/databases/tabs/config");
 const loadDatabaseSettingsTab = () => import("@/pages/databases/tabs/settings");
 const loadProjectDetailPage = () => import("@/pages/projects/detail");
 const loadProjectsListPage = () => import("@/pages/projects/list");
+const loadAdminUsersPage = () => import("@/pages/admin/users");
 
 const AuditLogsPage = React.lazy(() =>
   loadAuditLogsPage().then((module) => ({ default: module.AuditLogsPage })),
@@ -68,6 +70,9 @@ const ProjectDetailPage = React.lazy(() =>
 );
 const ProjectsListPage = React.lazy(() =>
   loadProjectsListPage().then((module) => ({ default: module.ProjectsListPage })),
+);
+const AdminUsersPage = React.lazy(() =>
+  loadAdminUsersPage().then((module) => ({ default: module.AdminUsersPage })),
 );
 
 const queryClient = new QueryClient({
@@ -228,6 +233,18 @@ export function App() {
                     </RouteSuspense>
                   }
                 />
+
+                {/* Admin routes */}
+                <Route element={<AdminGuard />}>
+                  <Route
+                    path="/admin/users"
+                    element={
+                      <RouteSuspense>
+                        <AdminUsersPage />
+                      </RouteSuspense>
+                    }
+                  />
+                </Route>
               </Route>
             </Routes>
             <Toaster position="bottom-right" />

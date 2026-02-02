@@ -39,6 +39,7 @@ import {
   NoteIcon,
   Settings01Icon,
   Sun03Icon,
+  UserMultiple02Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useQuery } from "@tanstack/react-query";
@@ -114,6 +115,22 @@ export function AppSidebar({ variant = "inset" }: { variant?: "sidebar" | "float
                     </NavLink>
                   </SidebarMenuItem>
                 ))}
+                {user?.role === "admin" && (
+                  <SidebarMenuItem key="/admin/users">
+                    <NavLink to="/admin/users">
+                      {({ isActive: navIsActive }) => (
+                        <SidebarMenuButton isActive={navIsActive} tooltip="Users">
+                          <HugeiconsIcon
+                            icon={UserMultiple02Icon}
+                            className="size-[18px]"
+                            strokeWidth={2}
+                          />
+                          <span>Users</span>
+                        </SidebarMenuButton>
+                      )}
+                    </NavLink>
+                  </SidebarMenuItem>
+                )}
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>

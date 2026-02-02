@@ -27,6 +27,12 @@ export interface UserResponse {
   created_at: string;
 }
 
+export interface UpdateUserRequest {
+  email?: string;
+  password?: string;
+  role?: "admin" | "user";
+}
+
 export interface LoginResponse {
   user: UserResponse;
   tokens: AuthTokens;

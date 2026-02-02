@@ -60,6 +60,22 @@ impl UserRepository {
         Ok(user)
     }
 
+    pub async fn list(&self, limit: i64, offset: i64) -> AppResult<Vec<User>> {
+        let users = sqlx::query_as::<_, User>(
+            r#"
+            SELECT * FROM users
+            ORDER BY created_at DESC
+            LIMIT ? OFFSET ?
+            "#,
+        )
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(users)
+    }
+
     pub async fn update(
         &self,
         id: &str,
@@ -73,38 +89,22 @@ impl UserRepository {
                 .await?
                 .ok_or_else(|| AppError::NotFound(format!("User with id '{}' not found", id)));
         }
-
-        let mut query = "UPDATE users SET ".to_string();
-        let mut updates = Vec::new();
-
-        if email.is_some() {
-            updates.push("email = ?");
-        }
-        if password_hash.is_some() {
-            updates.push("password_hash = ?");
-        }
-        if role.is_some() {
-            updates.push("role = ?");
-        }
-
-        query.push_str(&updates.join(", "));
-        query.push_str(" WHERE id = ?");
-
-        let mut query_builder = sqlx::query(&query);
+        let mut qb = sqlx::QueryBuilder::new("UPDATE users SET ");
+        let mut separated = qb.separated(", ");
 
         if let Some(e) = email {
-            query_builder = query_builder.bind(e);
+            separated.push("email = ").push_bind(e);
         }
         if let Some(p) = password_hash {
-            query_builder = query_builder.bind(p);
+            separated.push("password_hash = ").push_bind(p);
         }
         if let Some(r) = role {
-            query_builder = query_builder.bind(r);
+            separated.push("role = ").push_bind(r);
         }
 
-        query_builder = query_builder.bind(id);
+        qb.push(" WHERE id = ").push_bind(id);
 
-        let result = query_builder.execute(&self.pool).await?;
+        let result = qb.build().execute(&self.pool).await?;
 
         if result.rows_affected() == 0 {
             return Err(AppError::NotFound(format!(
@@ -132,18 +132,6 @@ impl UserRepository {
         }
 
         Ok(())
-    }
-
-    pub async fn list(&self, limit: i64, offset: i64) -> AppResult<Vec<User>> {
-        let users = sqlx::query_as::<_, User>(
-            r#"SELECT * FROM users ORDER BY created_at DESC LIMIT ? OFFSET ?"#,
-        )
-        .bind(limit)
-        .bind(offset)
-        .fetch_all(&self.pool)
-        .await?;
-
-        Ok(users)
     }
 
     pub async fn count(&self) -> AppResult<i64> {
