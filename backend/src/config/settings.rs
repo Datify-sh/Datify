@@ -392,6 +392,7 @@ impl Settings {
                 redis_image: std::env::var("REDIS_IMAGE").unwrap_or_else(|_| default_redis_image()),
                 data_dir: std::env::var("DOCKER_DATA_DIR").unwrap_or_else(|_| default_data_dir()),
                 public_host: std::env::var("DOCKER_PUBLIC_HOST")
+                    .or_else(|_| std::env::var("DOCKER_HOST_IP"))
                     .unwrap_or_else(|_| default_public_host()),
             },
             rate_limit: RateLimitSettings {

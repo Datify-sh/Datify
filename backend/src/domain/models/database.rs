@@ -225,17 +225,20 @@ pub struct ResourceLimits {
 }
 
 impl Database {
-    pub fn container_name(&self) -> String {
-        let prefix = match self.database_type.as_str() {
+    pub fn container_name_for(database_type: &str, name: &str) -> String {
+        let prefix = match database_type {
             "valkey" => "datify-valkey",
             "redis" => "datify-redis",
             _ => "datify-pg",
         };
-        let sanitized = self
-            .name
+        let sanitized = name
             .to_lowercase()
             .replace(|c: char| !c.is_alphanumeric(), "-");
         format!("{}-{}", prefix, sanitized)
+    }
+
+    pub fn container_name(&self) -> String {
+        Self::container_name_for(&self.database_type, &self.name)
     }
 
     pub fn to_response(&self, password: Option<&str>) -> DatabaseResponse {

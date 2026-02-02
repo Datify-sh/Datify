@@ -10,7 +10,8 @@ use bollard::models::{
 use bollard::query_parameters::{
     CreateContainerOptionsBuilder, CreateImageOptionsBuilder, ListContainersOptionsBuilder,
     ListNetworksOptionsBuilder, LogsOptionsBuilder, RemoveContainerOptionsBuilder,
-    ResizeExecOptions, StatsOptionsBuilder, StopContainerOptionsBuilder,
+    RenameContainerOptionsBuilder, ResizeExecOptions, StatsOptionsBuilder,
+    StopContainerOptionsBuilder,
 };
 use bollard::Docker;
 use bytes::Bytes;
@@ -308,6 +309,20 @@ impl DockerManager {
             .map_err(|e| AppError::Docker(format!("Failed to remove container: {}", e)))?;
 
         tracing::info!("Removed container {}", container_id);
+        Ok(())
+    }
+
+    pub async fn rename_container(&self, container_id: &str, new_name: &str) -> AppResult<()> {
+        let options = RenameContainerOptionsBuilder::default()
+            .name(new_name)
+            .build();
+
+        self.docker
+            .rename_container(container_id, options)
+            .await
+            .map_err(|e| AppError::Docker(format!("Failed to rename container: {}", e)))?;
+
+        tracing::info!("Renamed container {} to {}", container_id, new_name);
         Ok(())
     }
 

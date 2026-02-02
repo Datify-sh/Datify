@@ -212,6 +212,29 @@ impl DatabaseRepository {
             .ok_or_else(|| AppError::NotFound(format!("Database with id '{}' not found", id)))
     }
 
+    pub async fn clear_container(&self, id: &str, status: &str) -> AppResult<()> {
+        let result = sqlx::query(
+            r#"
+            UPDATE databases
+            SET container_id = NULL, container_status = ?, host = NULL, port = NULL
+            WHERE id = ?
+            "#,
+        )
+        .bind(status)
+        .bind(id)
+        .execute(&self.pool)
+        .await?;
+
+        if result.rows_affected() == 0 {
+            return Err(AppError::NotFound(format!(
+                "Database with id '{}' not found",
+                id
+            )));
+        }
+
+        Ok(())
+    }
+
     pub async fn update_status(&self, id: &str, status: &str) -> AppResult<()> {
         let result = sqlx::query(r#"UPDATE databases SET container_status = ? WHERE id = ?"#)
             .bind(status)

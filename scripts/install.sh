@@ -200,6 +200,7 @@ SERVER_HOST=0.0.0.0
 SERVER_PORT=8080
 DATABASE_URL=sqlite:/data/datify.db?mode=rwc
 DOCKER_DATA_DIR=/data
+DOCKER_PUBLIC_HOST=${public_ip}
 DOCKER_HOST_IP=${public_ip}
 LOG_LEVEL=info
 EOF

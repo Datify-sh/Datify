@@ -415,6 +415,8 @@ impl DatabaseService {
             ));
         }
 
+        let new_name = name.and_then(|n| if n != database.name { Some(n) } else { None });
+
         if let Some(cpu) = cpu_limit {
             if cpu < 0.5 {
                 return Err(AppError::Validation(
@@ -437,10 +439,25 @@ impl DatabaseService {
             }
         }
 
-        if let Some(new_public_exposed) = public_exposed {
-            if new_public_exposed != database.public_exposed {
-                self.recreate_container_for_public_access(&database, new_public_exposed)
+        let public_exposed_changed = public_exposed.filter(|v| *v != database.public_exposed);
+        if let Some(new_public_exposed) = public_exposed_changed {
+            self.recreate_container_for_public_access(&database, new_public_exposed, new_name)
+                .await?;
+        } else if let Some(updated_name) = new_name {
+            let container_id = database
+                .container_id
+                .as_ref()
+                .ok_or_else(|| AppError::Internal("Database has no container".to_string()))?;
+            if self.docker.container_exists(container_id).await? {
+                let new_container_name =
+                    Database::container_name_for(&database.database_type, updated_name);
+                self.docker
+                    .rename_container(container_id, &new_container_name)
                     .await?;
+            } else {
+                return Err(AppError::Internal(
+                    "Database container not found".to_string(),
+                ));
             }
         }
 
@@ -463,7 +480,12 @@ impl DatabaseService {
         &self,
         database: &Database,
         public_exposed: bool,
+        new_name: Option<&str>,
     ) -> AppResult<()> {
+        let container_name = Database::container_name_for(
+            &database.database_type,
+            new_name.unwrap_or(&database.name),
+        );
         let password_encrypted = database
             .password_encrypted
             .as_ref()
@@ -493,11 +515,11 @@ impl DatabaseService {
             }
         }
 
-        let container_id = match database.database_type.as_str() {
+        let container_result = match database.database_type.as_str() {
             "redis" => {
                 let version = database.redis_version.as_deref().unwrap_or("7.4");
                 let config = ContainerConfig {
-                    name: database.container_name(),
+                    name: container_name.clone(),
                     image: format!("redis:{}-alpine", version),
                     env: vec![],
                     data_path,
@@ -507,14 +529,12 @@ impl DatabaseService {
                     exposed_port,
                     cmd: None,
                 };
-                self.docker
-                    .create_redis_container(config, &password)
-                    .await?
+                self.docker.create_redis_container(config, &password).await
             },
             "valkey" => {
                 let version = database.valkey_version.as_deref().unwrap_or("8.0");
                 let config = ContainerConfig {
-                    name: database.container_name(),
+                    name: container_name.clone(),
                     image: format!("valkey/valkey:{}-alpine", version),
                     env: vec![],
                     data_path,
@@ -524,13 +544,11 @@ impl DatabaseService {
                     exposed_port,
                     cmd: None,
                 };
-                self.docker
-                    .create_valkey_container(config, &password)
-                    .await?
+                self.docker.create_valkey_container(config, &password).await
             },
             _ => {
                 let config = ContainerConfig {
-                    name: database.container_name(),
+                    name: container_name.clone(),
                     image: format!("postgres:{}", database.postgres_version),
                     env: vec![
                         format!("POSTGRES_USER={}", database.username),
@@ -551,7 +569,18 @@ impl DatabaseService {
                 };
                 self.docker
                     .create_postgres_container(config, &password)
-                    .await?
+                    .await
+            },
+        };
+
+        let container_id = match container_result {
+            Ok(id) => id,
+            Err(err) => {
+                let _ = self
+                    .database_repo
+                    .clear_container(&database.id, "error")
+                    .await;
+                return Err(err);
             },
         };
 
