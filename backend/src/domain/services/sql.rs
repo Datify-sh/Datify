@@ -15,6 +15,8 @@ use crate::error::{AppError, AppResult};
 use crate::infrastructure::docker::DockerManager;
 use crate::repositories::{DatabaseRepository, ProjectRepository};
 
+const MAX_SQL_LEN: usize = 100_000;
+
 #[derive(Clone)]
 pub struct SqlService {
     database_repo: DatabaseRepository,
@@ -301,6 +303,16 @@ impl SqlService {
         limit: i32,
         timeout_ms: i32,
     ) -> AppResult<QueryResult> {
+        let trimmed = sql.trim();
+        if trimmed.is_empty() {
+            return Err(AppError::Validation(
+                "SQL query cannot be empty".to_string(),
+            ));
+        }
+        if trimmed.len() > MAX_SQL_LEN {
+            return Err(AppError::Validation("SQL query is too large".to_string()));
+        }
+
         let database = self
             .database_repo
             .find_by_id(database_id)
@@ -314,7 +326,7 @@ impl SqlService {
         }
 
         // Basic SQL injection prevention - disallow dangerous statements
-        let sql_upper = sql.to_uppercase();
+        let sql_upper = trimmed.to_uppercase();
         let dangerous_patterns = [
             "DROP DATABASE",
             "DROP SCHEMA",
@@ -343,8 +355,20 @@ impl SqlService {
 
         let start = Instant::now();
 
+        let fetch_limit = limit + 1;
+        let is_select = matches!(main_statement_keyword(trimmed).as_deref(), Some("SELECT"));
+        let limited_sql = if is_select {
+            format!(
+                "SELECT * FROM ({}) AS datify_query LIMIT {}",
+                trimmed.trim_end_matches(';'),
+                fetch_limit
+            )
+        } else {
+            trimmed.to_string()
+        };
+
         let stmt = client
-            .prepare(sql)
+            .prepare(&limited_sql)
             .await
             .map_err(|e| AppError::Validation(format!("Query preparation failed: {}", e)))?;
 
@@ -356,15 +380,6 @@ impl SqlService {
                 data_type: type_to_string(col.type_()),
             })
             .collect();
-
-        let fetch_limit = limit + 1;
-        let limited_sql = if sql.trim().to_uppercase().starts_with("SELECT")
-            && !sql.to_uppercase().contains(" LIMIT ")
-        {
-            format!("{} LIMIT {}", sql.trim_end_matches(';'), fetch_limit)
-        } else {
-            sql.to_string()
-        };
 
         let rows = client
             .query(&limited_sql, &[])
@@ -491,6 +506,124 @@ impl SqlService {
             limit,
             offset,
         })
+    }
+}
+
+fn main_statement_keyword(sql: &str) -> Option<String> {
+    let mut tokens: Vec<String> = Vec::new();
+    let mut token = String::new();
+    let mut depth: i32 = 0;
+    let mut in_single = false;
+    let mut in_double = false;
+    let mut in_line_comment = false;
+    let mut in_block_comment = false;
+    let mut chars = sql.chars().peekable();
+
+    while let Some(c) = chars.next() {
+        if in_line_comment {
+            if c == '\n' {
+                in_line_comment = false;
+            }
+            continue;
+        }
+
+        if in_block_comment {
+            if c == '*' && chars.peek() == Some(&'/') {
+                chars.next();
+                in_block_comment = false;
+            }
+            continue;
+        }
+
+        if in_single {
+            if c == '\'' {
+                if chars.peek() == Some(&'\'') {
+                    chars.next();
+                } else {
+                    in_single = false;
+                }
+            }
+            continue;
+        }
+
+        if in_double {
+            if c == '"' {
+                in_double = false;
+            }
+            continue;
+        }
+
+        if c == '-' && chars.peek() == Some(&'-') {
+            chars.next();
+            in_line_comment = true;
+            continue;
+        }
+
+        if c == '/' && chars.peek() == Some(&'*') {
+            chars.next();
+            in_block_comment = true;
+            continue;
+        }
+
+        if c == '\'' {
+            in_single = true;
+            continue;
+        }
+
+        if c == '"' {
+            in_double = true;
+            continue;
+        }
+
+        match c {
+            '(' => {
+                if depth == 0 && !token.is_empty() {
+                    tokens.push(token.to_uppercase());
+                    token.clear();
+                }
+                depth += 1;
+            },
+            ')' => {
+                if depth == 0 && !token.is_empty() {
+                    tokens.push(token.to_uppercase());
+                    token.clear();
+                }
+                if depth > 0 {
+                    depth -= 1;
+                }
+            },
+            _ => {
+                if depth == 0 && (c.is_alphanumeric() || c == '_') {
+                    token.push(c);
+                } else if depth == 0 && !token.is_empty() {
+                    tokens.push(token.to_uppercase());
+                    token.clear();
+                }
+            },
+        }
+    }
+
+    if depth == 0 && !token.is_empty() {
+        tokens.push(token.to_uppercase());
+    }
+
+    let mut iter = tokens.into_iter();
+    let first = iter.next()?;
+
+    if first == "WITH" {
+        let mut next = iter.next();
+        if next.as_deref() == Some("RECURSIVE") {
+            next = iter.next();
+        }
+        while let Some(tok) = next {
+            if matches!(tok.as_str(), "SELECT" | "INSERT" | "UPDATE" | "DELETE") {
+                return Some(tok);
+            }
+            next = iter.next();
+        }
+        None
+    } else {
+        Some(first)
     }
 }
 

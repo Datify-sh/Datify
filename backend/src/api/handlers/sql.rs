@@ -29,6 +29,17 @@ fn get_user_agent(headers: &HeaderMap) -> Option<String> {
         .map(|s| s.to_string())
 }
 
+fn summarize_sql_for_audit(sql: &str, limit: i32, timeout_ms: i32) -> serde_json::Value {
+    let statement = sql.split_whitespace().next().unwrap_or("").to_uppercase();
+
+    serde_json::json!({
+        "statement": statement,
+        "length": sql.len(),
+        "limit": limit,
+        "timeout_ms": timeout_ms,
+    })
+}
+
 #[derive(Clone)]
 pub struct SqlState {
     pub sql_service: Arc<SqlService>,
@@ -114,11 +125,7 @@ pub async fn execute_query(
         AuditAction::ExecuteQuery,
         AuditEntityType::Query,
         Some(id),
-        Some(serde_json::json!({
-            "sql": sql,
-            "limit": limit,
-            "timeout_ms": timeout_ms,
-        })),
+        Some(summarize_sql_for_audit(sql, limit, timeout_ms)),
         AuditStatus::Success,
         get_client_ip(&headers),
         get_user_agent(&headers),

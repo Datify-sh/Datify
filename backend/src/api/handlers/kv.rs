@@ -29,6 +29,20 @@ fn get_user_agent(headers: &HeaderMap) -> Option<String> {
         .map(|s| s.to_string())
 }
 
+fn summarize_kv_for_audit(command: &str, timeout_ms: Option<i32>) -> serde_json::Value {
+    let cmd = command
+        .split_whitespace()
+        .next()
+        .unwrap_or("")
+        .to_uppercase();
+
+    serde_json::json!({
+        "command": cmd,
+        "length": command.len(),
+        "timeout_ms": timeout_ms,
+    })
+}
+
 #[utoipa::path(
     post,
     path = "/api/v1/databases/{id}/kv",
@@ -64,10 +78,7 @@ pub async fn execute_kv_command(
         AuditAction::ExecuteQuery,
         AuditEntityType::Query,
         Some(id),
-        Some(serde_json::json!({
-            "command": payload.command,
-            "timeout_ms": payload.timeout_ms,
-        })),
+        Some(summarize_kv_for_audit(&payload.command, payload.timeout_ms)),
         AuditStatus::Success,
         get_client_ip(&headers),
         get_user_agent(&headers),

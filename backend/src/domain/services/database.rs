@@ -18,6 +18,7 @@ use crate::infrastructure::docker::{ContainerConfig, DockerManager};
 use crate::repositories::{DatabaseRepository, ProjectRepository};
 
 const KV_SENSITIVE_KEYS: &[&str] = &["requirepass", "masterauth"];
+const MAX_KV_COMMAND_LEN: usize = 4096;
 
 #[derive(Clone)]
 pub struct DatabaseService {
@@ -50,6 +51,13 @@ impl DatabaseService {
             data_dir,
             host,
             encryption_key,
+        }
+    }
+
+    fn internal_port_for_type(database_type: &str) -> i32 {
+        match database_type {
+            "redis" | "valkey" => 6379,
+            _ => 5432,
         }
     }
 
@@ -186,7 +194,17 @@ impl DatabaseService {
             .map(|p| p.to_string())
             .unwrap_or_else(generate_password);
 
-        let port = self.database_repo.get_next_available_port().await?;
+        let internal_port = Self::internal_port_for_type(&database.database_type);
+        let port = if database.public_exposed {
+            self.database_repo.get_next_available_port().await?
+        } else {
+            internal_port
+        };
+        let exposed_port = if database.public_exposed {
+            Some(port as u16)
+        } else {
+            None
+        };
 
         let data_path = format!("{}/{}", self.data_dir, database.id);
 
@@ -202,8 +220,8 @@ impl DatabaseService {
                 data_path,
                 cpu_limit,
                 memory_limit_mb: memory_limit_mb as i64,
-                internal_port: 6379,
-                exposed_port: Some(port as u16),
+                internal_port: internal_port as u16,
+                exposed_port,
                 cmd: None,
             };
             self.docker
@@ -218,8 +236,8 @@ impl DatabaseService {
                 data_path,
                 cpu_limit,
                 memory_limit_mb: memory_limit_mb as i64,
-                internal_port: 6379,
-                exposed_port: Some(port as u16),
+                internal_port: internal_port as u16,
+                exposed_port,
                 cmd: None,
             };
             self.docker
@@ -236,8 +254,8 @@ impl DatabaseService {
                 data_path,
                 cpu_limit,
                 memory_limit_mb: memory_limit_mb as i64,
-                internal_port: 5432,
-                exposed_port: Some(port as u16),
+                internal_port: internal_port as u16,
+                exposed_port,
                 cmd: Some(vec![
                     "postgres".to_string(),
                     "-c".to_string(),
@@ -411,6 +429,13 @@ impl DatabaseService {
             }
         }
 
+        if let Some(new_public_exposed) = public_exposed {
+            if new_public_exposed != database.public_exposed {
+                self.recreate_container_for_public_access(&database, new_public_exposed)
+                    .await?;
+            }
+        }
+
         self.database_repo
             .update(
                 id,
@@ -424,6 +449,116 @@ impl DatabaseService {
         self.get_by_id_response(id)
             .await?
             .ok_or_else(|| AppError::NotFound(format!("Database '{}' not found", id)))
+    }
+
+    async fn recreate_container_for_public_access(
+        &self,
+        database: &Database,
+        public_exposed: bool,
+    ) -> AppResult<()> {
+        let password_encrypted = database
+            .password_encrypted
+            .as_ref()
+            .ok_or_else(|| AppError::Internal("No password stored for database".to_string()))?;
+        let password = self.decrypt_password(password_encrypted)?;
+
+        let internal_port = Self::internal_port_for_type(&database.database_type);
+        let port = if public_exposed {
+            self.database_repo.get_next_available_port().await?
+        } else {
+            internal_port
+        };
+        let exposed_port = if public_exposed {
+            Some(port as u16)
+        } else {
+            None
+        };
+
+        let data_path = format!("{}/{}", self.data_dir, database.id);
+        std::fs::create_dir_all(&data_path)
+            .map_err(|e| AppError::Internal(format!("Failed to create data directory: {}", e)))?;
+
+        if let Some(container_id) = &database.container_id {
+            if self.docker.container_exists(container_id).await? {
+                let _ = self.docker.stop_container(container_id).await;
+                let _ = self.docker.remove_container(container_id, true).await;
+            }
+        }
+
+        let container_id = match database.database_type.as_str() {
+            "redis" => {
+                let version = database.redis_version.as_deref().unwrap_or("7.4");
+                let config = ContainerConfig {
+                    name: database.container_name(),
+                    image: format!("redis:{}-alpine", version),
+                    env: vec![],
+                    data_path,
+                    cpu_limit: database.cpu_limit,
+                    memory_limit_mb: database.memory_limit_mb as i64,
+                    internal_port: internal_port as u16,
+                    exposed_port,
+                    cmd: None,
+                };
+                self.docker
+                    .create_redis_container(config, &password)
+                    .await?
+            },
+            "valkey" => {
+                let version = database.valkey_version.as_deref().unwrap_or("8.0");
+                let config = ContainerConfig {
+                    name: database.container_name(),
+                    image: format!("valkey/valkey:{}-alpine", version),
+                    env: vec![],
+                    data_path,
+                    cpu_limit: database.cpu_limit,
+                    memory_limit_mb: database.memory_limit_mb as i64,
+                    internal_port: internal_port as u16,
+                    exposed_port,
+                    cmd: None,
+                };
+                self.docker
+                    .create_valkey_container(config, &password)
+                    .await?
+            },
+            _ => {
+                let config = ContainerConfig {
+                    name: database.container_name(),
+                    image: format!("postgres:{}", database.postgres_version),
+                    env: vec![
+                        format!("POSTGRES_USER={}", database.username),
+                        "POSTGRES_DB=postgres".to_string(),
+                    ],
+                    data_path,
+                    cpu_limit: database.cpu_limit,
+                    memory_limit_mb: database.memory_limit_mb as i64,
+                    internal_port: internal_port as u16,
+                    exposed_port,
+                    cmd: Some(vec![
+                        "postgres".to_string(),
+                        "-c".to_string(),
+                        "shared_preload_libraries=pg_stat_statements".to_string(),
+                        "-c".to_string(),
+                        "pg_stat_statements.track=all".to_string(),
+                    ]),
+                };
+                self.docker
+                    .create_postgres_container(config, &password)
+                    .await?
+            },
+        };
+
+        self.database_repo
+            .update_container(
+                &database.id,
+                &container_id,
+                "stopped",
+                &self.host,
+                port,
+                password_encrypted,
+            )
+            .await?;
+
+        Ok(())
     }
 
     pub async fn change_password(
@@ -630,11 +765,19 @@ impl DatabaseService {
         if trimmed.is_empty() {
             return Err(AppError::Validation("Command cannot be empty".to_string()));
         }
+        if trimmed.len() > MAX_KV_COMMAND_LEN {
+            return Err(AppError::Validation("Command is too long".to_string()));
+        }
 
         let args = split_shell_words(trimmed)
             .map_err(|e| AppError::Validation(format!("Invalid command syntax: {}", e)))?;
         if args.is_empty() {
             return Err(AppError::Validation("Command cannot be empty".to_string()));
+        }
+        if args[0].starts_with('-') {
+            return Err(AppError::Validation(
+                "CLI options are not allowed in commands".to_string(),
+            ));
         }
 
         let cmd_name = args[0].to_uppercase();
@@ -793,7 +936,17 @@ impl DatabaseService {
             .await?;
 
         let password = generate_password();
-        let port = self.database_repo.get_next_available_port().await?;
+        let internal_port = Self::internal_port_for_type(&branch.database_type);
+        let port = if branch.public_exposed {
+            self.database_repo.get_next_available_port().await?
+        } else {
+            internal_port
+        };
+        let exposed_port = if branch.public_exposed {
+            Some(port as u16)
+        } else {
+            None
+        };
         let container_name = branch.container_name();
         let data_path = format!("{}/{}", self.data_dir, branch.id);
 
@@ -810,8 +963,8 @@ impl DatabaseService {
                     data_path,
                     cpu_limit: source.cpu_limit,
                     memory_limit_mb: source.memory_limit_mb as i64,
-                    internal_port: 6379,
-                    exposed_port: Some(port as u16),
+                    internal_port: internal_port as u16,
+                    exposed_port,
                     cmd: None,
                 };
                 self.docker
@@ -827,8 +980,8 @@ impl DatabaseService {
                     data_path,
                     cpu_limit: source.cpu_limit,
                     memory_limit_mb: source.memory_limit_mb as i64,
-                    internal_port: 6379,
-                    exposed_port: Some(port as u16),
+                    internal_port: internal_port as u16,
+                    exposed_port,
                     cmd: None,
                 };
                 self.docker
@@ -846,8 +999,8 @@ impl DatabaseService {
                     data_path,
                     cpu_limit: source.cpu_limit,
                     memory_limit_mb: source.memory_limit_mb as i64,
-                    internal_port: 5432,
-                    exposed_port: Some(port as u16),
+                    internal_port: internal_port as u16,
+                    exposed_port,
                     cmd: Some(vec![
                         "postgres".to_string(),
                         "-c".to_string(),
