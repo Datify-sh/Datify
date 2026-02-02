@@ -113,6 +113,8 @@ pub struct CreateDatabaseRequest {
     #[schema(example = "7.4")]
     pub redis_version: Option<String>,
     pub password: Option<String>,
+    #[serde(default)]
+    pub public_exposed: Option<bool>,
     #[serde(default = "default_cpu_limit")]
     pub cpu_limit: f64,
     #[serde(default = "default_memory_limit")]

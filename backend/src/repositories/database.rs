@@ -34,6 +34,7 @@ impl DatabaseRepository {
         cpu_limit: f64,
         memory_limit_mb: i32,
         storage_limit_mb: i32,
+        public_exposed: bool,
         branch_name: &str,
         is_default_branch: bool,
         parent_branch_id: Option<&str>,
@@ -47,8 +48,8 @@ impl DatabaseRepository {
 
         sqlx::query(
             r#"
-            INSERT INTO databases (id, project_id, name, database_type, postgres_version, valkey_version, redis_version, cpu_limit, memory_limit_mb, storage_limit_mb, branch_name, is_default_branch, parent_branch_id, forked_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO databases (id, project_id, name, database_type, postgres_version, valkey_version, redis_version, cpu_limit, memory_limit_mb, storage_limit_mb, public_exposed, branch_name, is_default_branch, parent_branch_id, forked_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             "#,
         )
         .bind(&id)
@@ -61,6 +62,7 @@ impl DatabaseRepository {
         .bind(cpu_limit)
         .bind(memory_limit_mb)
         .bind(storage_limit_mb)
+        .bind(public_exposed)
         .bind(branch_name)
         .bind(is_default_branch)
         .bind(parent_branch_id)

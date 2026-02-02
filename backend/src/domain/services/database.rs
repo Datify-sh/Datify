@@ -111,6 +111,7 @@ impl DatabaseService {
         valkey_version: Option<&str>,
         redis_version: Option<&str>,
         password: Option<&str>,
+        public_exposed: Option<bool>,
         cpu_limit: f64,
         memory_limit_mb: i32,
         storage_limit_mb: i32,
@@ -172,6 +173,8 @@ impl DatabaseService {
             )));
         }
 
+        let public_exposed = public_exposed.unwrap_or(false);
+
         let database = self
             .database_repo
             .create(
@@ -184,6 +187,7 @@ impl DatabaseService {
                 cpu_limit,
                 memory_limit_mb,
                 storage_limit_mb,
+                public_exposed,
                 "main",
                 true,
                 None,
@@ -929,6 +933,7 @@ impl DatabaseService {
                 source.cpu_limit,
                 source.memory_limit_mb,
                 source.storage_limit_mb,
+                false,
                 branch_name,
                 false,
                 Some(database_id),
