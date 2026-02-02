@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::time::Duration;
 
 use aes_gcm::{
     aead::{Aead, KeyInit},
@@ -6,10 +7,11 @@ use aes_gcm::{
 };
 use base64::{engine::general_purpose, Engine as _};
 use rand::RngCore;
+use shell_words::split as split_shell_words;
 
 use crate::domain::models::{
     BranchResponse, ConfigFormat, ConfigSource, Database, DatabaseConfigResponse, DatabaseResponse,
-    PostgresVersion, RedisVersion, UpdateDatabaseConfigResponse, ValkeyVersion,
+    KvCommandResult, PostgresVersion, RedisVersion, UpdateDatabaseConfigResponse, ValkeyVersion,
 };
 use crate::error::{AppError, AppResult};
 use crate::infrastructure::docker::{ContainerConfig, DockerManager};
@@ -580,6 +582,115 @@ impl DatabaseService {
             .ok_or_else(|| AppError::NotFound(format!("Database '{}' not found", database_id)))?;
 
         self.project_repo.is_owner(&project_id, user_id).await
+    }
+
+    pub async fn execute_kv_command(
+        &self,
+        database_id: &str,
+        user_id: &str,
+        command: &str,
+        timeout_ms: Option<i32>,
+    ) -> AppResult<KvCommandResult> {
+        if !self.check_access(database_id, user_id).await? {
+            return Err(AppError::Forbidden);
+        }
+
+        let database = self
+            .database_repo
+            .find_by_id(database_id)
+            .await?
+            .ok_or_else(|| AppError::NotFound(format!("Database '{}' not found", database_id)))?;
+
+        if database.database_type != "redis" && database.database_type != "valkey" {
+            return Err(AppError::Validation(
+                "KV commands are only supported for Redis or Valkey databases".to_string(),
+            ));
+        }
+
+        let container_id = database
+            .container_id
+            .clone()
+            .ok_or_else(|| AppError::NotFound("Database has no container".to_string()))?;
+
+        let status = self.docker.get_container_status(&container_id).await?;
+        if status != "running" {
+            return Err(AppError::Conflict(format!(
+                "Container is not running (status: {})",
+                status
+            )));
+        }
+
+        let password = database
+            .password_encrypted
+            .as_ref()
+            .and_then(|p| self.decrypt_password(p).ok())
+            .ok_or_else(|| AppError::Internal("No password stored for database".to_string()))?;
+
+        let trimmed = command.trim();
+        if trimmed.is_empty() {
+            return Err(AppError::Validation("Command cannot be empty".to_string()));
+        }
+
+        let args = split_shell_words(trimmed)
+            .map_err(|e| AppError::Validation(format!("Invalid command syntax: {}", e)))?;
+        if args.is_empty() {
+            return Err(AppError::Validation("Command cannot be empty".to_string()));
+        }
+
+        let cmd_name = args[0].to_uppercase();
+        if matches!(
+            cmd_name.as_str(),
+            "MONITOR" | "SUBSCRIBE" | "PSUBSCRIBE" | "SSUBSCRIBE"
+        ) {
+            return Err(AppError::Validation(
+                "Streaming commands are not supported in the editor. Use the terminal instead."
+                    .to_string(),
+            ));
+        }
+
+        let cli = if database.database_type == "valkey" {
+            "valkey-cli"
+        } else {
+            "redis-cli"
+        };
+
+        let mut cmd = vec![
+            cli.to_string(),
+            "--no-auth-warning".to_string(),
+            "-a".to_string(),
+            password,
+            "--raw".to_string(),
+        ];
+        cmd.extend(args);
+
+        let timeout = timeout_ms.unwrap_or(5000).clamp(1000, 60000);
+        let output = tokio::time::timeout(
+            Duration::from_millis(timeout as u64),
+            self.docker.run_exec(&container_id, cmd, None),
+        )
+        .await
+        .map_err(|_| AppError::Validation("Command timed out".to_string()))??;
+
+        if let Some(code) = output.exit_code {
+            if code != 0 {
+                let message = if output.stderr.trim().is_empty() {
+                    output.stdout.trim()
+                } else {
+                    output.stderr.trim()
+                };
+                return Err(AppError::Docker(format!("Command failed: {}", message)));
+            }
+        }
+
+        let result = if output.stdout.trim().is_empty() {
+            output.stderr.trim()
+        } else {
+            output.stdout.trim()
+        };
+
+        Ok(KvCommandResult {
+            result: result.to_string(),
+        })
     }
 
     pub async fn list_branches(

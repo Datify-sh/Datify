@@ -163,6 +163,7 @@ pub async fn create_router(
         )
         .route("/{id}/start", post(handlers::start_database))
         .route("/{id}/stop", post(handlers::stop_database))
+        .route("/{id}/kv", post(handlers::execute_kv_command))
         .route(
             "/{id}/change-password",
             post(handlers::change_database_password),

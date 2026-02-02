@@ -24,6 +24,7 @@ import type { TerminalType } from "@/pages/databases/detail-context";
 import {
   ArrowDownIcon,
   BarChartIcon,
+  CodeIcon,
   CommandLineIcon,
   Database01Icon,
   Delete01Icon,
@@ -53,6 +54,7 @@ const statusColors: Record<string, "default" | "secondary" | "destructive" | "ou
 
 type DatabaseTabKey =
   | "connection"
+  | "editor"
   | "branches"
   | "metrics"
   | "terminal"
@@ -61,6 +63,7 @@ type DatabaseTabKey =
   | "settings";
 
 const loadConnectionTab = () => import("./tabs/connection");
+const loadEditorTab = () => import("./tabs/editor");
 const loadBranchesTab = () => import("./tabs/branches");
 const loadMetricsTab = () => import("./tabs/metrics");
 const loadTerminalTab = () => import("./tabs/terminal");
@@ -70,6 +73,7 @@ const loadSettingsTab = () => import("./tabs/settings");
 
 const TAB_ROUTE_MAP: Record<DatabaseTabKey, string> = {
   connection: "",
+  editor: "editor",
   branches: "branches",
   metrics: "metrics",
   terminal: "terminal",
@@ -526,6 +530,10 @@ export function DatabaseDetailPage() {
           <TabsTrigger value="connection" onMouseEnter={() => void loadConnectionTab()}>
             <HugeiconsIcon icon={Database01Icon} className="size-4" strokeWidth={2} />
             Connection
+          </TabsTrigger>
+          <TabsTrigger value="editor" onMouseEnter={() => void loadEditorTab()}>
+            <HugeiconsIcon icon={CodeIcon} className="size-4" strokeWidth={2} />
+            Editor
           </TabsTrigger>
           {hasBranches && (
             <TabsTrigger value="branches" onMouseEnter={() => void loadBranchesTab()}>
